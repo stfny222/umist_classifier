@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Generated/processed data
+processed_data/
+*.npy
+*.pkl
+*.csv
+*.h5
+*.hdf5
+
+# Model outputs
+models/
+checkpoints/
+runs/
+results/
+*.pt
+*.pth
+*.ckpt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dataset - exclude to keep repo lightweight
+# Team members should download from official source
+umist_cropped.mat
