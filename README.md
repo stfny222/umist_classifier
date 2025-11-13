@@ -6,6 +6,40 @@ This project provides shared preprocessing modules for the UMIST facial recognit
 
 ---
 
+## Setup
+
+### 1. Clone Repository
+```bash
+git clone git@github.com:stfny222/umist_classifier.git
+cd umist_classifier
+```
+
+### 2. Download Dataset
+The UMIST dataset (`umist_cropped.mat`) is not included in the repository (gitignored to save space).
+
+**Place in repository root:**
+```bash
+umist_classifier/
+├── umist_cropped.mat    # ← Download and add this file here
+├── data_preprocessing/
+├── README.md
+├── .gitignore
+└── ...
+```
+
+### 3. Install Dependencies (Optional)
+If you don't already have them, install the required packages:
+```bash
+pip install numpy pandas scikit-learn scipy joblib
+```
+
+### 4. Test Setup
+```bash
+python -c "from data_preprocessing import load_preprocessed_data; X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(); print('✓ Setup complete!')"
+```
+
+---
+
 ## Quick Start (Recommended)
 
 ```python
