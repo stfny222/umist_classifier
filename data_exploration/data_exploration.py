@@ -32,7 +32,7 @@ def explore_full_dataset():
     
     # Load full dataset
     
-    faceimg, label, df = load_umist_data()
+    faceimg, label, df = load_umist_data(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat"))
     
     # Dataset statistics
     print("\n" + "-" * 70)
@@ -118,7 +118,7 @@ def explore_split_datasets():
     print("=" * 70)
     
     # Load preprocessed splits
-    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data()
+    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat"))
     
     print("\nNumber of samples per split:")
     print(f"  Training samples: {len(y_train)}")
