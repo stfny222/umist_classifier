@@ -59,7 +59,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 # Import pipeline loader
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_preprocessing import load_preprocessed_data
+from data_preprocessing import load_preprocessed_data, load_preprocessed_data_with_augmentation
 
 sns.set_style("whitegrid")
 
@@ -234,13 +234,13 @@ def determine_pca_components_for_lda(
 	"""
 	n_samples, n_features = X_train.shape
 	n_classes = len(np.unique(y_train))
-	
+
 	# For LDA, we need n_components < n_samples - n_classes
 	# We use a slightly smaller value to ensure numerical stability
 	max_pca_components = min(n_samples, n_features)
 	n_components = n_samples - n_classes - 5  # Small buffer for stability
 	n_components = max(1, min(n_components, max_pca_components))
-	
+
 	print(f"PCA->LDA Pipeline:")
 	print(f"  Training samples: {n_samples}")
 	print(f"  Number of classes: {n_classes}")
@@ -265,37 +265,37 @@ def determine_pca_components_for_lda(
 		plt.figure(figsize=(10, 6))
 		plt.plot(x, cum_var, label="Cumulative Explained Variance", color="steelblue")
 		plt.scatter(x, cum_var, s=12, alpha=0.4, color="steelblue")
-		
+
 		# Vertical line at selected components
-		plt.axvline(x=n_components, color="green", linestyle="--", 
+		plt.axvline(x=n_components, color="green", linestyle="--",
 					label=f"PCA Components for LDA: {n_components}")
-		
+
 		# Horizontal line at the explained variance for selected components
-		plt.axhline(y=final_cum_var, color="orange", linestyle="--", 
+		plt.axhline(y=final_cum_var, color="orange", linestyle="--",
 					label=f"Explained Variance: {final_cum_var:.2f}")
-		
+
 		# Mark the intersection point
 		plt.scatter([n_components], [final_cum_var], color="red", s=100, zorder=5,
 					label=f"n_samples - n_classes - 5 = {n_components}")
-		
+
 		# Add annotation
-		plt.annotate(f'({n_components}, {final_cum_var:.3f})', 
+		plt.annotate(f'({n_components}, {final_cum_var:.3f})',
 					xy=(n_components, final_cum_var),
 					xytext=(n_components + 20, final_cum_var - 0.05),
 					fontsize=10,
 					arrowprops=dict(arrowstyle='->', color='red', lw=1.5))
-		
+
 		plt.xlabel("Number of Components")
 		plt.ylabel("Cumulative Explained Variance Ratio")
 		plt.title("PCA Explained Variance Curve for PCA→LDA Pipeline\n"
 				  f"(n_samples={n_samples}, n_classes={n_classes})")
 		plt.legend(loc='lower right')
 		plt.tight_layout()
-		
+
 		if save_plot_path:
 			plt.savefig(save_plot_path, dpi=150, bbox_inches='tight')
 			print(f"Plot saved to {save_plot_path}")
-		
+
 		plt.show()
 
 	return n_components, pca_full, cum_var, var_ratio
@@ -333,7 +333,7 @@ def fit_and_transform_pca_lda(
 		Fitted LDA object.
 	"""
 	n_classes = len(np.unique(y_train))
-	
+
 	# Step 1: PCA
 	print(f"\n[Step 1] Fitting PCA with {n_pca_components} components on training set...")
 	pca = PCA(n_components=n_pca_components, svd_solver="randomized", random_state=42)
@@ -345,7 +345,7 @@ def fit_and_transform_pca_lda(
 			X_train_pca.shape, X_val_pca.shape, X_test_pca.shape
 		)
 	)
-	
+
 	# Step 2: LDA
 	# LDA can have at most min(n_classes - 1, n_features) components
 	max_lda_components = min(n_classes - 1, n_pca_components)
@@ -359,19 +359,20 @@ def fit_and_transform_pca_lda(
 			X_train_lda.shape, X_val_lda.shape, X_test_lda.shape
 		)
 	)
-	
+
 	# Display LDA explained variance ratio
 	lda_var_ratio = lda.explained_variance_ratio_
 	lda_cum_var = np.cumsum(lda_var_ratio)
 	print(f"\nLDA explained variance ratios: {lda_var_ratio}")
 	print(f"LDA cumulative explained variance: {lda_cum_var[-1]:.4f}")
-	
+
 	return X_train_lda, X_val_lda, X_test_lda, pca, lda
 
 
 def main():
+	path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat")
 
-	X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat"))
+	X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(dataset_path=path)
 	print(
 		f"Loaded splits -> Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}. "
 		f"Feature dimensionality: {X_train.shape[1]}"
@@ -383,7 +384,7 @@ def main():
 	print("\n" + "="*70)
 	print("METHOD 1: PCA ONLY (Knee Detection)")
 	print("="*70)
-	
+
 	n_components, pca_full, cum_var, var_ratio = determine_pca_components(
 		X_train,
 		variance_threshold=0.95,
@@ -405,7 +406,7 @@ def main():
 	print("\n" + "="*70)
 	print("METHOD 2: PCA -> LDA (Two-Stage Reduction)")
 	print("="*70)
-	
+
 	n_pca_components, pca_full_lda, cum_var_lda, var_ratio_lda = determine_pca_components_for_lda(
 		X_train,
 		y_train,

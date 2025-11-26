@@ -323,7 +323,7 @@ def compute_augmentation_statistics(X_original, X_augmented):
     return stats
 
 
-def test_augmentation_pipeline():
+def test_augmentation_pipeline(train_ratio=0.30, val_ratio=0.35, test_ratio=0.35):
     """
     Test the complete augmentation pipeline with sample data.
 
@@ -343,18 +343,22 @@ def test_augmentation_pipeline():
 
     # Load data
     print("\n1. Loading preprocessed data...")
+    dataset_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "umist_cropped.mat"
+    )
     X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "umist_cropped.mat"
-        )
+        dataset_path=dataset_path,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio,
+        test_ratio=test_ratio
     )
 
     print(f"   Training set: {X_train.shape}")
 
     # Visualize augmentations
     print("\n2. Visualizing augmentation quality...")
-    visualize_augmentations(X_train, num_samples=10, num_augmentations=5)
+    visualize_augmentations(X_train, num_samples=10, num_augmentations=7)
 
     # Generate augmented data (smaller factor for testing)
     print("\n3. Generating augmented dataset...")
@@ -397,4 +401,4 @@ def test_augmentation_pipeline():
 
 if __name__ == "__main__":
     # Run test pipeline
-    X_train_aug, y_train_aug, stats = test_augmentation_pipeline()
+    X_train_aug, y_train_aug, stats = test_augmentation_pipeline(train_ratio=0.30, val_ratio=0.35, test_ratio=0.35)
