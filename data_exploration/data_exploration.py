@@ -19,7 +19,7 @@ import seaborn as sns
 # Add parent directory to path to import data_preprocessing
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from data_preprocessing import load_umist_data, load_preprocessed_data
+from data_preprocessing import load_umist_data, load_preprocessed_data, load_preprocessed_data_with_augmentation
 
 # Set plotting style
 sns.set_style("whitegrid")
@@ -133,7 +133,7 @@ def explore_full_dataset():
     return df, class_counts
 
 
-def explore_split_datasets():
+def explore_split_datasets(augmented=False):
     """
     Load split datasets and visualize class distribution across splits.
     """
@@ -142,12 +142,21 @@ def explore_split_datasets():
     print("=" * 70)
 
     # Load preprocessed splits
-    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "umist_cropped.mat",
+    if augmented:
+        print("\nLoading AUGMENTED preprocessed data splits...")
+        X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data_with_augmentation(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "umist_cropped.mat",
+            )
         )
-    )
+    else:
+        X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "umist_cropped.mat",
+            )
+        )
 
     print("\nNumber of samples per split:")
     print(f"  Training samples: {len(y_train)}")
@@ -365,7 +374,7 @@ if __name__ == "__main__":
     df, class_counts = explore_full_dataset()
 
     # Explore split datasets
-    explore_split_datasets()
+    explore_split_datasets(augmented=False)
 
     # Display sample images
     display_sample_images(n_samples=5)

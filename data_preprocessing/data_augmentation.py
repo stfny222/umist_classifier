@@ -56,7 +56,7 @@ def create_augmentation_generator():
         Model that applies random augmentations when training=True
     """
     data_gen = tf.keras.Sequential([
-        tf.keras.layers.RandomRotation(factor=0.03, fill_mode="nearest"),
+        tf.keras.layers.RandomRotation(factor=10/360, fill_mode="nearest"),
         tf.keras.layers.RandomTranslation(height_factor=0.1, width_factor=0.1, fill_mode="nearest"),
         tf.keras.layers.RandomZoom(height_factor=0.1, width_factor=0.1, fill_mode="nearest"),
         tf.keras.layers.RandomFlip(mode="horizontal")
@@ -160,7 +160,6 @@ def visualize_augmentations(
     X_train,
     num_samples=10,
     num_augmentations=5,
-    subjects_to_show=None,
     figsize=(15, 20)
 ):
     """
@@ -174,8 +173,6 @@ def visualize_augmentations(
         Number of original images to show (default: 10)
     num_augmentations : int
         Number of augmented versions to generate per image (default: 5)
-    subjects_to_show : list, optional
-        Specific subject IDs to visualize. If None, random samples are shown.
     figsize : tuple
         Figure size (default: (15, 20))
 
@@ -362,7 +359,7 @@ def test_augmentation_pipeline():
     # Generate augmented data (smaller factor for testing)
     print("\n3. Generating augmented dataset...")
     X_train_aug, y_train_aug = augment_training_data(
-        X_train, y_train, augmentation_factor=3
+        X_train, y_train
     )
 
     # Compute statistics
