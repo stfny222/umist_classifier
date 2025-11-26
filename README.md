@@ -9,15 +9,18 @@ This project provides shared preprocessing modules for the UMIST facial recognit
 ## Setup
 
 ### 1. Clone Repository
+
 ```bash
 git clone git@github.com:stfny222/umist_classifier.git
 cd umist_classifier
 ```
 
 ### 2. Download Dataset
+
 The UMIST dataset (`umist_cropped.mat`) is not included in the repository (gitignored to save space).
 
 **Place in repository root:**
+
 ```bash
 umist_classifier/
 ├── umist_cropped.mat    # ← Download and add this file here
@@ -28,12 +31,15 @@ umist_classifier/
 ```
 
 ### 3. Install Dependencies (Optional)
+
 If you don't already have them, install the required packages:
+
 ```bash
-pip install numpy pandas scikit-learn scipy joblib
+pip install numpy pandas scikit-learn scipy joblib kneed matplotlib seaborn tensorflow
 ```
 
 ### 4. Test Setup
+
 ```bash
 python -c "from data_preprocessing import load_preprocessed_data; X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(); print('✓ Setup complete!')"
 ```
@@ -125,12 +131,14 @@ X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
 ## What the Modules Do
 
 ### `data_preprocessing/data_loader.py`
+
 - Loads MATLAB .mat file
 - Extracts and flattens images (112×92 → 10304 features)
 - Creates labels (subject IDs 0-19)
 - **Caches raw data** for faster reloading
 
 ### `data_preprocessing/data_splitter.py`
+
 - Splits data with stratification (maintains class balance)
 - Normalizes using StandardScaler (fitted on training data only)
 - Uses 60-20-20 train/val/test split
@@ -138,6 +146,7 @@ X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
 - **Caches splits** for instant reuse
 
 ### `data_preprocessing/pipeline.py`
+
 - High-level orchestration of loading + splitting
 - Multi-level caching for maximum performance
 - **Use `load_preprocessed_data()` for most cases**
@@ -158,9 +167,56 @@ X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
 
 ---
 
+## Data Augmentation (Optional - For Better Performance)
+
+If your model needs more training data, you have two options:
+
+### Option 1: One-Line Augmentation (Easiest)
+
+```python
+from data_preprocessing import load_preprocessed_data_with_augmentation
+
+# Load data with 5x augmentation in one call (345 → 1725 training samples)
+X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
+    load_preprocessed_data_with_augmentation(augmentation_factor=5)
+
+# Train directly
+model.fit(X_train, y_train)
+```
+
+### Option 2: Manual Control (For Experimentation)
+
+```python
+from data_preprocessing import load_preprocessed_data
+from data_preprocessing.data_augmentation import augment_training_data, visualize_augmentations
+
+# Load data as usual
+X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data()
+
+# First, visualize to check quality
+visualize_augmentations(X_train, num_samples=10)
+
+# Generate 5x more training data (345 → 1725 samples)
+X_train_aug, y_train_aug = augment_training_data(X_train, y_train, augmentation_factor=5)
+
+# Train with augmented data
+model.fit(X_train_aug, y_train_aug)
+```
+
+**What it does:**
+
+- Applies random rotations (±10°), shifts (±10%), zoom (±10%), and flips
+- Automatically preserves class labels
+- Helps models generalize better with more diverse training samples
+
+**Note:** Requires TensorFlow. Install with: `pip install tensorflow`
+
+---
+
 ## Cache Management
 
 Cache is stored in `processed_data/` (gitignored - won't be committed):
+
 - `raw/` - Original loaded data
 - `splits/` - Preprocessed train/val/test splits
 
