@@ -30,7 +30,7 @@ umist_classifier/
 ### 3. Install Dependencies (Optional)
 If you don't already have them, install the required packages:
 ```bash
-pip install numpy pandas scikit-learn scipy joblib
+pip install numpy pandas scikit-learn scipy joblib kneed matplotlib seaborn
 ```
 
 ### 4. Test Setup
@@ -155,6 +155,51 @@ X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
 **Reproducible:** Fixed random seed → same results every time
 
 **Fast:** Automatic caching at all levels → work efficiently
+
+---
+
+## Data Augmentation (Optional - For Better Performance)
+
+If your model needs more training data, you have two options:
+
+### Option 1: One-Line Augmentation (Easiest)
+
+```python
+from data_preprocessing import load_preprocessed_data_with_augmentation
+
+# Load data with 5x augmentation in one call (345 → 1725 training samples)
+X_train, X_val, X_test, y_train, y_val, y_test, scaler = \
+    load_preprocessed_data_with_augmentation(augmentation_factor=5)
+
+# Train directly
+model.fit(X_train, y_train)
+```
+
+### Option 2: Manual Control (For Experimentation)
+
+```python
+from data_preprocessing import load_preprocessed_data
+from data_preprocessing.data_augmentation import augment_training_data, visualize_augmentations
+
+# Load data as usual
+X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data()
+
+# First, visualize to check quality
+visualize_augmentations(X_train, num_samples=10)
+
+# Generate 5x more training data (345 → 1725 samples)
+X_train_aug, y_train_aug = augment_training_data(X_train, y_train, augmentation_factor=5)
+
+# Train with augmented data
+model.fit(X_train_aug, y_train_aug)
+```
+
+**What it does:**
+- Applies random rotations (±10°), shifts (±10%), zoom (±10%), and flips
+- Automatically preserves class labels
+- Helps models generalize better with more diverse training samples
+
+**Note:** Requires TensorFlow. Install with: `pip install tensorflow`
 
 ---
 
