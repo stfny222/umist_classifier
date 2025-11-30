@@ -1,0 +1,9 @@
+# Outputs directory for agglomerative clustering results
+# This directory contains:
+# - dendrogram_pca.png: Hierarchical clustering dendrogram for PCA features
+# - dendrogram_umap.png: Hierarchical clustering dendrogram for UMAP features
+# - metric_comparison.png: Comparison of clustering metrics across methods
+# - clustering_pca_2d.png: 2D visualization of PCA clustering
+# - clustering_umap_2d.png: 2D visualization of UMAP clustering
+# - summary_table.png: Summary table of results at k=n_classes
+# - clustering_results.csv: All numerical results
