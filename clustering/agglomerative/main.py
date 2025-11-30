@@ -319,13 +319,19 @@ def main():
     print("\nGenerating dendrograms...")
     plot_dendrogram(
         X_combined_pca, y_combined,
+        n_clusters=n_classes,
         title="Dendrogram - PCA Features",
+        linkage_method='ward',
+        distance_metric='euclidean',
         save_path=os.path.join(output_dir, "dendrogram_pca.png")
     )
     
     plot_dendrogram(
         X_combined_umap, y_combined,
+        n_clusters=n_classes,
         title="Dendrogram - UMAP Features",
+        linkage_method='ward',
+        distance_metric='euclidean',
         save_path=os.path.join(output_dir, "dendrogram_umap.png")
     )
     
