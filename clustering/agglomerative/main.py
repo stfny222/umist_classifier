@@ -39,24 +39,25 @@ from sklearn.cluster import AgglomerativeClustering
 
 # Add parent directories to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from data_preprocessing import load_preprocessed_data
 from dimensionality_reduction.pca import determine_pca_components, fit_and_transform_pca
 from dimensionality_reduction.umap_reduction import fit_and_transform_umap
 
-from evaluation import (
+from shared import (
     evaluate_clustering, 
     print_metrics,
     evaluate_dimensionality_reduction,
     print_dimred_metrics,
 )
-from visualization import (
-    plot_dendrogram,
+from shared import (
     plot_metric_comparison,
     plot_clustering_2d,
     plot_summary_table,
     plot_dimred_comparison,
 )
+from visualization import plot_dendrogram
 
 
 def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_name=""):
@@ -312,7 +313,8 @@ def main():
     print("\nGenerating dimensionality reduction comparison plot...")
     plot_dimred_comparison(
         pca_dimred_metrics, umap_dimred_metrics,
-        save_path=os.path.join(output_dir, "dimred_comparison.png")
+        save_path=os.path.join(output_dir, "dimred_comparison.png"),
+        algorithm_name="Agglomerative"
     )
     
     # Dendrograms
@@ -339,7 +341,8 @@ def main():
     print("\nGenerating metric comparison plot...")
     plot_metric_comparison(
         results_dict,
-        save_path=os.path.join(output_dir, "metric_comparison.png")
+        save_path=os.path.join(output_dir, "metric_comparison.png"),
+        algorithm_name="Agglomerative"
     )
     
     # 2D visualizations at k = n_classes
@@ -364,21 +367,24 @@ def main():
     
     plot_clustering_2d(
         X_combined_pca[:, :2], labels_pca, y_combined,
-        title=f"PCA Clustering (k={n_classes})",
-        save_path=os.path.join(output_dir, "clustering_pca_2d.png")
+        title=f"Clustering - PCA Features (k={n_classes})",
+        save_path=os.path.join(output_dir, "clustering_pca_2d.png"),
+        algorithm_name="Agglomerative"
     )
     
     plot_clustering_2d(
         X_combined_umap_2d, labels_umap, y_combined,
-        title=f"UMAP Clustering (k={n_classes})",
-        save_path=os.path.join(output_dir, "clustering_umap_2d.png")
+        title=f"Clustering - UMAP Features (k={n_classes})",
+        save_path=os.path.join(output_dir, "clustering_umap_2d.png"),
+        algorithm_name="Agglomerative"
     )
     
     # Summary table
     print("\nGenerating summary table...")
     summary_df = plot_summary_table(
         results_dict, n_classes,
-        save_path=os.path.join(output_dir, "summary_table.png")
+        save_path=os.path.join(output_dir, "summary_table.png"),
+        algorithm_name="Agglomerative"
     )
     
     # =========================================================================
