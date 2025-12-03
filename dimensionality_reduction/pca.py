@@ -397,23 +397,14 @@ def fit_and_transform_pca_lda(
 	return X_train_lda, X_val_lda, X_test_lda, pca, lda
 
 
-def run_pca_only(X_train, X_val, X_test, y_train, y_val, y_test, scaler,
-				 variance_threshold=0.95, plot=True):
-	"""
-	Run PCA-only dimensionality reduction.
+def main():
+	path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat")
 
-	Parameters
-	----------
-	X_train, X_val, X_test : np.ndarray
-		Normalized feature matrices
-	y_train, y_val, y_test : np.ndarray
-		Label arrays (not used for PCA, but kept for consistency)
-	scaler : StandardScaler
-		Fitted scaler
-	variance_threshold : float
-		Fallback threshold if knee not found
-	plot : bool
-		Whether to display plots
+	X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(dataset_path=path)
+	print(
+		f"Loaded splits -> Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}. "
+		f"Feature dimensionality: {X_train.shape[1]}"
+	)
 
 	Returns
 	-------
@@ -423,11 +414,6 @@ def run_pca_only(X_train, X_val, X_test, y_train, y_val, y_test, scaler,
 	print("PCA DIMENSIONALITY REDUCTION")
 	print("="*70)
 
-	print(f"\nInput shapes:")
-	print(f"  Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}")
-	print(f"  Original dimensionality: {X_train.shape[1]}")
-
-	# Determine optimal components
 	n_components, pca_full, cum_var, var_ratio = determine_pca_components(
 		X_train,
 		variance_threshold=variance_threshold,
