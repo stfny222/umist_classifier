@@ -198,6 +198,34 @@ def fit_and_transform_pca(
 	return X_train_pca, X_val_pca, X_test_pca, pca
 
 
+def reconstruct_from_pca(X_pca, pca, scaler=None):
+	"""
+	Reconstruct original images from PCA-transformed data.
+
+	Parameters
+	----------
+	X_pca : np.ndarray
+		PCA-transformed data (n_samples, n_components)
+	pca : PCA
+		Fitted PCA object
+	scaler : StandardScaler, optional
+		If provided, inverse transform to original scale
+
+	Returns
+	-------
+	X_reconstructed : np.ndarray
+		Reconstructed images in original feature space (n_samples, n_features)
+	"""
+	# Inverse transform from PCA space to original feature space
+	X_reconstructed = pca.inverse_transform(X_pca)
+
+	# If scaler provided, inverse transform to original pixel scale
+	if scaler is not None:
+		X_reconstructed = scaler.inverse_transform(X_reconstructed)
+
+	return X_reconstructed
+
+
 def determine_pca_components_for_lda(
 	X_train: np.ndarray,
 	y_train: np.ndarray,
@@ -378,48 +406,202 @@ def main():
 		f"Feature dimensionality: {X_train.shape[1]}"
 	)
 
-	# =========================================================================
-	# Method 1: PCA Only (with automatic knee detection)
-	# =========================================================================
+	Returns
+	-------
+	dict : Results containing transformed data and PCA model
+	"""
 	print("\n" + "="*70)
-	print("METHOD 1: PCA ONLY (Knee Detection)")
+	print("PCA DIMENSIONALITY REDUCTION")
 	print("="*70)
 
 	n_components, pca_full, cum_var, var_ratio = determine_pca_components(
 		X_train,
-		variance_threshold=0.95,
+		variance_threshold=variance_threshold,
 		max_components=None,
-		plot=True,
+		plot=plot,
 	)
 
+	# Fit and transform
 	X_train_pca, X_val_pca, X_test_pca, pca = fit_and_transform_pca(
 		X_train, X_val, X_test, n_components
 	)
 
-	print(
-		f"Final PCA cumulative explained variance: {np.cumsum(pca.explained_variance_ratio_)[-1]:.4f}"
-	)
+	final_var = np.cumsum(pca.explained_variance_ratio_)[-1]
+	print(f"\nFinal PCA summary:")
+	print(f"  Components: {n_components}/{X_train.shape[1]} ({n_components/X_train.shape[1]*100:.1f}%)")
+	print(f"  Explained variance: {final_var:.4f} ({final_var*100:.2f}%)")
 
-	# =========================================================================
-	# Method 2: PCA -> LDA (Two-stage dimensionality reduction)
-	# =========================================================================
+	return {
+		'X_train': X_train_pca,
+		'X_val': X_val_pca,
+		'X_test': X_test_pca,
+		'y_train': y_train,
+		'y_val': y_val,
+		'y_test': y_test,
+		'pca': pca,
+		'scaler': scaler,
+		'n_components': n_components,
+		'explained_variance': final_var
+	}
+
+
+def run_pca_lda(X_train, X_val, X_test, y_train, y_val, y_test, scaler, plot=True):
+	"""
+	Run PCA->LDA two-stage dimensionality reduction.
+
+	Parameters
+	----------
+	X_train, X_val, X_test : np.ndarray
+		Normalized feature matrices
+	y_train, y_val, y_test : np.ndarray
+		Label arrays (required for LDA)
+	scaler : StandardScaler
+		Fitted scaler
+	plot : bool
+		Whether to display plots
+
+	Returns
+	-------
+	dict : Results containing transformed data and models
+	"""
 	print("\n" + "="*70)
-	print("METHOD 2: PCA -> LDA (Two-Stage Reduction)")
+	print("PCA -> LDA TWO-STAGE REDUCTION")
 	print("="*70)
 
-	n_pca_components, pca_full_lda, cum_var_lda, var_ratio_lda = determine_pca_components_for_lda(
+	print(f"\nInput shapes:")
+	print(f"  Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}")
+	print(f"  Original dimensionality: {X_train.shape[1]}")
+
+	# Determine PCA components for LDA
+	n_pca_components, pca_full, cum_var, var_ratio = determine_pca_components_for_lda(
 		X_train,
 		y_train,
-		plot=True,
+		plot=plot,
 	)
 
-	X_train_lda, X_val_lda, X_test_lda, pca_lda, lda = fit_and_transform_pca_lda(
+	# Fit and transform
+	X_train_lda, X_val_lda, X_test_lda, pca, lda = fit_and_transform_pca_lda(
 		X_train, X_val, X_test, y_train, n_pca_components
 	)
 
-	print(
-		f"\nFinal PCA->LDA reduction: {X_train.shape[1]} -> {n_pca_components} (PCA) -> {X_train_lda.shape[1]} (LDA)"
+	print(f"\nFinal PCA->LDA summary:")
+	print(f"  Reduction: {X_train.shape[1]} -> {n_pca_components} (PCA) -> {X_train_lda.shape[1]} (LDA)")
+
+	return {
+		'X_train': X_train_lda,
+		'X_val': X_val_lda,
+		'X_test': X_test_lda,
+		'y_train': y_train,
+		'y_val': y_val,
+		'y_test': y_test,
+		'pca': pca,
+		'lda': lda,
+		'scaler': scaler,
+		'n_pca_components': n_pca_components,
+		'n_lda_components': X_train_lda.shape[1]
+	}
+
+
+def main():
+	"""Main entry point with argument parsing."""
+	parser = argparse.ArgumentParser(
+		description='PCA dimensionality reduction for UMIST dataset'
 	)
+	parser.add_argument(
+		'--method',
+		type=str,
+		choices=['pca', 'pca-lda'],
+		default='pca',
+		help='Reduction method: "pca" (PCA only) or "pca-lda" (PCA->LDA)'
+	)
+	parser.add_argument(
+		'--augmented',
+		action='store_true',
+		help='Use augmented training data'
+	)
+	parser.add_argument(
+		'--train-split',
+		type=float,
+		default=0.30,
+		help='Training split ratio (default: 0.30)'
+	)
+	parser.add_argument(
+		'--val-split',
+		type=float,
+		default=0.35,
+		help='Validation split ratio (default: 0.35)'
+	)
+	parser.add_argument(
+		'--test-split',
+		type=float,
+		default=0.35,
+		help='Test split ratio (default: 0.35)'
+	)
+	parser.add_argument(
+		'--variance-threshold',
+		type=float,
+		default=0.95,
+		help='Variance threshold for PCA (default: 0.95)'
+	)
+	parser.add_argument(
+		'--no-plot',
+		action='store_true',
+		help='Disable plots'
+	)
+
+	args = parser.parse_args()
+
+	# Load data
+	path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "umist_cropped.mat")
+
+	print("="*70)
+	print("LOADING DATA")
+	print("="*70)
+	print(f"\nConfiguration:")
+	print(f"  Method: {args.method.upper()}")
+	print(f"  Augmented: {args.augmented}")
+	print(f"  Split: {args.train_split:.0%}/{args.val_split:.0%}/{args.test_split:.0%}")
+
+	if args.augmented:
+		cache_dir = f'processed_data_{int(args.train_split*100)}_{int(args.val_split*100)}_{int(args.test_split*100)}'
+		X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data_with_augmentation(
+			dataset_path=path,
+			cache_dir=cache_dir,
+			augmentation_factor=5,
+			train_ratio=args.train_split,
+			val_ratio=args.val_split,
+			test_ratio=args.test_split,
+		)
+	else:
+		X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
+			dataset_path=path,
+			train_ratio=args.train_split,
+			val_ratio=args.val_split,
+			test_ratio=args.test_split,
+		)
+
+	print(f"\nLoaded splits:")
+	print(f"  Train: {X_train.shape[0]} samples")
+	print(f"  Val: {X_val.shape[0]} samples")
+	print(f"  Test: {X_test.shape[0]} samples")
+	print(f"  Features: {X_train.shape[1]}")
+
+	# Run selected method
+	if args.method == 'pca':
+		results = run_pca_only(
+			X_train, X_val, X_test, y_train, y_val, y_test, scaler,
+			variance_threshold=args.variance_threshold,
+			plot=not args.no_plot
+		)
+	else:  # pca-lda
+		results = run_pca_lda(
+			X_train, X_val, X_test, y_train, y_val, y_test, scaler,
+			plot=not args.no_plot
+		)
+
+	print("\n" + "="*70)
+	print("COMPLETE!")
+	print("="*70)
 
 
 if __name__ == "__main__":
