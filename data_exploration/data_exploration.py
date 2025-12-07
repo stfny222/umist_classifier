@@ -32,6 +32,10 @@ __all__ = ["explore_full_dataset", "explore_split_datasets"]
 sns.set_style("whitegrid")
 plt.rcParams["figure.figsize"] = (12, 6)
 
+# Create plots directory if it doesn't exist
+PLOTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'plots')
+os.makedirs(PLOTS_DIR, exist_ok=True)
+
 
 def explore_full_dataset():
     """
@@ -134,8 +138,8 @@ def explore_full_dataset():
     plt.xticks(class_counts.index)
     plt.legend()
     plt.tight_layout()
-    # plt.show()
-    plt.savefig(f"./plots/umist_class_distribution_full_dataset.png")
+    plt.savefig(os.path.join(PLOTS_DIR, "umist_class_distribution_full_dataset.png"))
+    plt.show()
 
     return df, class_counts
 
@@ -143,9 +147,9 @@ def explore_full_dataset():
 def explore_split_datasets(
     augmented=False,
     augmentation_factor=5,
-    train_split=0.60,
-    val_split=0.20,
-    test_split=0.20,
+    train_split=0.30,
+    val_split=0.35,
+    test_split=0.35,
 ):
     """
     Load split datasets and visualize class distribution across splits.
@@ -295,7 +299,15 @@ def explore_split_datasets(
     ax.grid(axis="y", alpha=0.3)
 
     plt.tight_layout()
-    # plt.show()
+    
+    # save plots (must be before plt.show() which clears the figure)
+    plt.savefig(
+        os.path.join(
+            PLOTS_DIR,
+            f"umist_class_distribution_splits{'_augmented' if augmented else ''}_{int(train_split*100)}_{int(val_split*100)}_{int(test_split*100)}.png",
+        )
+    )
+    plt.show()
 
     # Summary statistics
     print("\n" + "-" * 70)
@@ -312,11 +324,6 @@ def explore_split_datasets(
     print(f"  All 20 subjects represented in val: {len(val_counts) == 20}")
     print(f"  All 20 subjects represented in test: {len(test_counts) == 20}")
 
-    # save plots
-    plt.savefig(
-        f"./plots/umist_class_distribution_splits{'_augmented' if augmented else ''}_{int(train_split*100)}_{int(val_split*100)}_{int(test_split*100)}.png"
-    )
-
 
 if __name__ == "__main__":
     # Explore full dataset
@@ -324,8 +331,11 @@ if __name__ == "__main__":
 
     # Explore split datasets
 
-    # Option 0: Default 60/20/20 split without augmentation
+    # Option 0: Default 30/35/35 split without augmentation
     explore_split_datasets()
+    
+    # Option 0: Default 30/35/35 split with augmentation
+    explore_split_datasets(augmented=True)
 
     # Option 1: 40/30/30 split with 7x augmentation
     # explore_split_datasets(augmented=True, augmentation_factor=7, train_split=0.40, val_split=0.30, test_split=0.30)
