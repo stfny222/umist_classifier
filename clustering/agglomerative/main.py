@@ -64,6 +64,152 @@ from shared import (
     plot_dimred_comparison,
 )
 from visualization import plot_dendrogram
+import matplotlib.pyplot as plt
+
+
+def plot_cluster_images_comparison(X_original, labels_dict, y_true, n_clusters_to_show=5, 
+                                    n_images_per_cluster=6, save_path=None):
+    """
+    Plot actual face images grouped by cluster assignments for multiple methods.
+    
+    Parameters
+    ----------
+    X_original : np.ndarray
+        Original flattened images (n_samples, n_features)
+    labels_dict : dict
+        Dictionary mapping method name -> cluster labels array
+    y_true : np.ndarray
+        True labels for reference
+    n_clusters_to_show : int
+        Number of clusters to display
+    n_images_per_cluster : int
+        Number of images to show per cluster
+    save_path : str, optional
+        Path to save the figure
+    """
+    n_methods = len(labels_dict)
+    img_height, img_width = 112, 92
+    
+    fig, axes = plt.subplots(
+        n_methods * n_clusters_to_show, n_images_per_cluster + 1,
+        figsize=(2 * (n_images_per_cluster + 1), 2 * n_methods * n_clusters_to_show)
+    )
+    
+    row_idx = 0
+    for method_idx, (method_name, cluster_labels) in enumerate(labels_dict.items()):
+        unique_clusters = np.unique(cluster_labels)[:n_clusters_to_show]
+        
+        for cluster_id in unique_clusters:
+            # Get indices of images in this cluster
+            cluster_mask = cluster_labels == cluster_id
+            cluster_indices = np.where(cluster_mask)[0]
+            
+            # Get true labels for this cluster to show purity
+            true_labels_in_cluster = y_true[cluster_mask]
+            most_common_label = np.bincount(true_labels_in_cluster).argmax()
+            purity = np.sum(true_labels_in_cluster == most_common_label) / len(true_labels_in_cluster)
+            
+            # Sample images from this cluster
+            n_to_show = min(n_images_per_cluster, len(cluster_indices))
+            sample_indices = np.random.choice(cluster_indices, n_to_show, replace=False)
+            
+            # First column: cluster info
+            ax_info = axes[row_idx, 0]
+            ax_info.axis('off')
+            ax_info.text(0.5, 0.5, 
+                        f"{method_name}\nCluster {cluster_id}\n({len(cluster_indices)} imgs)\nPurity: {purity:.0%}",
+                        ha='center', va='center', fontsize=9, fontweight='bold',
+                        transform=ax_info.transAxes,
+                        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+            
+            # Show images
+            for img_idx, sample_idx in enumerate(sample_indices):
+                ax = axes[row_idx, img_idx + 1]
+                img = X_original[sample_idx].reshape(img_height, img_width)
+                ax.imshow(img, cmap='gray')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # Show true label as small text
+                ax.set_title(f"ID:{y_true[sample_idx]}", fontsize=7)
+            
+            # Hide unused subplots
+            for img_idx in range(n_to_show, n_images_per_cluster):
+                axes[row_idx, img_idx + 1].axis('off')
+            
+            row_idx += 1
+    
+    plt.suptitle("Cluster Contents Comparison: Actual Face Images by Cluster\n(ID = True Subject Label)", 
+                 fontsize=14, fontweight='bold', y=1.01)
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {save_path}")
+    
+    plt.show()
+
+
+def plot_cluster_purity_comparison(labels_dict, y_true, n_classes, save_path=None):
+    """
+    Plot cluster purity distribution for each method side by side.
+    
+    Parameters
+    ----------
+    labels_dict : dict
+        Dictionary mapping method name -> cluster labels array
+    y_true : np.ndarray
+        True labels
+    n_classes : int
+        Number of clusters
+    save_path : str, optional
+        Path to save the figure
+    """
+    fig, axes = plt.subplots(1, len(labels_dict), figsize=(5 * len(labels_dict), 5))
+    
+    if len(labels_dict) == 1:
+        axes = [axes]
+    
+    colors = ['steelblue', 'darkorange', 'green']
+    
+    for idx, (method_name, cluster_labels) in enumerate(labels_dict.items()):
+        purities = []
+        cluster_sizes = []
+        
+        for cluster_id in range(n_classes):
+            cluster_mask = cluster_labels == cluster_id
+            if np.sum(cluster_mask) > 0:
+                true_labels_in_cluster = y_true[cluster_mask]
+                most_common = np.bincount(true_labels_in_cluster).argmax()
+                purity = np.sum(true_labels_in_cluster == most_common) / len(true_labels_in_cluster)
+                purities.append(purity)
+                cluster_sizes.append(np.sum(cluster_mask))
+        
+        ax = axes[idx]
+        bars = ax.bar(range(len(purities)), purities, color=colors[idx % len(colors)], 
+                      edgecolor='black', alpha=0.8)
+        ax.set_xlabel('Cluster ID', fontsize=11)
+        ax.set_ylabel('Purity', fontsize=11)
+        ax.set_title(f'{method_name}\nMean Purity: {np.mean(purities):.3f}', 
+                     fontsize=12, fontweight='bold')
+        ax.set_ylim(0, 1.1)
+        ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5)
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Add size labels on top of bars
+        for bar, size in zip(bars, cluster_sizes):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
+                   f'n={size}', ha='center', va='bottom', fontsize=7, rotation=45)
+    
+    plt.suptitle('Per-Cluster Purity Comparison', fontsize=14, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {save_path}")
+    
+    plt.show()
 
 
 def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_name=""):
@@ -469,6 +615,32 @@ def main():
         title=f"Clustering - Autoencoder Features (k={n_classes})",
         save_path=os.path.join(output_dir, "clustering_autoencoder_2d.png"),
         algorithm_name="Agglomerative"
+    )
+    
+    # =========================================================================
+    # Cluster Images Comparison - Show actual face images in clusters
+    # =========================================================================
+    print("\nGenerating cluster images comparison...")
+    
+    labels_dict = {
+        "PCA": labels_pca,
+        "UMAP": labels_umap,
+        "Autoencoder": labels_ae,
+    }
+    
+    # Plot actual images in clusters (showing a subset of clusters)
+    plot_cluster_images_comparison(
+        X_combined, labels_dict, y_combined,
+        n_clusters_to_show=5,
+        n_images_per_cluster=6,
+        save_path=os.path.join(output_dir, "cluster_images_comparison.png")
+    )
+    
+    # Plot per-cluster purity comparison
+    print("\nGenerating per-cluster purity comparison...")
+    plot_cluster_purity_comparison(
+        labels_dict, y_combined, n_classes,
+        save_path=os.path.join(output_dir, "cluster_purity_comparison.png")
     )
     
     # Summary table
