@@ -153,7 +153,7 @@ def run_tuning(X_train, X_val, y_train_oh, y_val_oh, num_classes):
         X_train, y_train_oh,
         validation_data=(X_val, y_val_oh),
         batch_size=32,
-        verbose=1
+        verbose=0
     )
     
     best_hps = tuner.get_best_hyperparameters()[0]
@@ -161,6 +161,7 @@ def run_tuning(X_train, X_val, y_train_oh, y_val_oh, num_classes):
     print("\n" + "-" * 40)
     print("BEST HYPERPARAMETERS")
     print("-" * 40)
+    print(f"  Val Accuracy: {tuner.get_best_trials(num_trials=1)[0].score:.4f}")
     print(f"  Filters: {best_hps.get('filters')}")
     print(f"  Dropout: {best_hps.get('dropout')}")
     print(f"  L2 reg: {best_hps.get('l2_reg')}")
