@@ -37,11 +37,12 @@ import pandas as pd
 
 from sklearn.cluster import AgglomerativeClustering
 
+from data_preprocessing.pipeline import load_preprocessed_data_with_augmentation
+
 # Add parent directories to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from data_preprocessing import load_preprocessed_data
 from dimensionality_reduction.pca import determine_pca_components, fit_and_transform_pca
 from dimensionality_reduction.umap_reduction import fit_and_transform_umap
 
@@ -184,7 +185,7 @@ def main():
     print("=" * 70)
     
     print("\nLoading preprocessed data...")
-    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
+    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data_with_augmentation(
         dataset_path=data_path
     )
     
