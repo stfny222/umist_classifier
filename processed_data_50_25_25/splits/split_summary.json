@@ -1,0 +1,15 @@
+{
+  "train_size": 287,
+  "val_size": 144,
+  "test_size": 144,
+  "train_ratio": 0.5,
+  "val_ratio": 0.25,
+  "test_ratio": 0.25,
+  "n_features": 10304,
+  "n_subjects": 20,
+  "random_state": 42,
+  "stratification": "stratified",
+  "normalization": "StandardScaler",
+  "normalization_fit_on": "training_set_only",
+  "total_samples": 575
+}

@@ -1,9 +1,9 @@
 """
-Agglomerative Clustering Comparison: PCA vs UMAP
-=================================================
+Agglomerative Clustering Comparison: PCA vs UMAP vs Autoencoder
+================================================================
 
 This script performs agglomerative hierarchical clustering on the UMIST facial 
-recognition dataset using two unsupervised dimensionality reduction methods:
+recognition dataset using three unsupervised dimensionality reduction methods:
 
 1. PCA (Principal Component Analysis)
    - Linear dimensionality reduction
@@ -15,7 +15,12 @@ recognition dataset using two unsupervised dimensionality reduction methods:
    - Preserves local and global structure
    - Better at preserving cluster structure
 
-Both methods are fully UNSUPERVISED, making this a valid unsupervised learning
+3. Autoencoder (Convolutional)
+   - Non-linear dimensionality reduction
+   - Learns hierarchical features
+   - Can capture complex patterns
+
+All methods are fully UNSUPERVISED, making this a valid unsupervised learning
 pipeline for clustering evaluation.
 
 Evaluation Metrics:
@@ -37,14 +42,14 @@ import pandas as pd
 
 from sklearn.cluster import AgglomerativeClustering
 
-from data_preprocessing.pipeline import load_preprocessed_data_with_augmentation
-
-# Add parent directories to path
+# Add parent directories to path BEFORE imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from data_preprocessing.pipeline import load_preprocessed_data_with_augmentation
 from dimensionality_reduction.pca import determine_pca_components, fit_and_transform_pca
 from dimensionality_reduction.umap_reduction import fit_and_transform_umap
+from dimensionality_reduction.autoencoding import train_autoencoder, reconstruct_images
 
 from shared import (
     evaluate_clustering, 
@@ -181,7 +186,7 @@ def main():
     data_path = os.path.join(project_root, "umist_cropped.mat")
     
     print("=" * 70)
-    print("AGGLOMERATIVE CLUSTERING: PCA vs UMAP (Unsupervised Comparison)")
+    print("AGGLOMERATIVE CLUSTERING: PCA vs UMAP vs Autoencoder (Unsupervised Comparison)")
     print("=" * 70)
     
     print("\nLoading preprocessed data...")
@@ -234,10 +239,41 @@ def main():
     X_combined_umap = np.vstack([X_train_umap, X_val_umap])
     
     # =========================================================================
-    # Step 3: Evaluate Dimensionality Reduction Quality
+    # Step 3: Autoencoder Dimensionality Reduction
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 3: Dimensionality Reduction Quality Evaluation")
+    print("STEP 3: Autoencoder Dimensionality Reduction")
+    print("=" * 70)
+    
+    # Use similar number of components as PCA for fair comparison
+    n_ae_components = n_pca_components
+    
+    # Train autoencoder
+    autoencoder, encoder, history = train_autoencoder(
+        X_train, X_val,
+        latent_dim=n_ae_components,
+        epochs=50,
+        batch_size=32
+    )
+    
+    # Get encoded representations
+    X_train_reshaped = X_train.reshape(-1, 112, 92, 1)
+    X_val_reshaped = X_val.reshape(-1, 112, 92, 1)
+    X_test_reshaped = X_test.reshape(-1, 112, 92, 1)
+    
+    X_train_ae = encoder.predict(X_train_reshaped, verbose=0)
+    X_val_ae = encoder.predict(X_val_reshaped, verbose=0)
+    X_test_ae = encoder.predict(X_test_reshaped, verbose=0)
+    
+    X_combined_ae = np.vstack([X_train_ae, X_val_ae])
+    
+    print(f"Autoencoder encoded shape: {X_combined_ae.shape}")
+    
+    # =========================================================================
+    # Step 4: Evaluate Dimensionality Reduction Quality
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 4: Dimensionality Reduction Quality Evaluation")
     print("=" * 70)
     
     # Evaluate PCA
@@ -260,21 +296,45 @@ def main():
     )
     print_dimred_metrics(umap_dimred_metrics)
     
+    # Evaluate Autoencoder
+    print("\nEvaluating Autoencoder...")
+    # Compute reconstruction error for autoencoder
+    X_combined_reshaped = X_combined.reshape(-1, 112, 92, 1)
+    X_combined_ae_recon = autoencoder.predict(X_combined_reshaped, verbose=0).reshape(X_combined.shape[0], -1)
+    ae_recon_error = np.mean((X_combined - X_combined_ae_recon) ** 2)
+    ae_relative_recon_error = ae_recon_error / np.var(X_combined)
+    
+    ae_dimred_metrics = evaluate_dimensionality_reduction(
+        X_combined, X_combined_ae,
+        n_neighbors=10,
+        pca_model=None,  # Autoencoder uses its own reconstruction
+        method_name="Autoencoder"
+    )
+    # Add reconstruction metrics manually
+    ae_dimred_metrics['reconstruction_error'] = ae_recon_error
+    ae_dimred_metrics['relative_recon_error'] = ae_relative_recon_error
+    
+    # Print autoencoder metrics
+    print(f"  Trustworthiness: {ae_dimred_metrics['trustworthiness']:.4f}")
+    print(f"  Reconstruction Error: {ae_recon_error:.4f}")
+    print(f"  Relative Recon Error: {ae_relative_recon_error*100:.2f}%")
+    print(f"  N Components: {ae_dimred_metrics['n_components']}")
+    
     # Summary comparison
     print("\n" + "-" * 70)
     print("Dimensionality Reduction Comparison:")
     print("-" * 70)
-    print(f"{'Metric':<25} {'PCA':<15} {'UMAP':<15}")
-    print("-" * 55)
-    print(f"{'Trustworthiness':<25} {pca_dimred_metrics['trustworthiness']:<15.4f} {umap_dimred_metrics['trustworthiness']:<15.4f}")
-    print(f"{'Reconstruction Error':<25} {pca_dimred_metrics['reconstruction_error']:<15.4f} {'N/A':<15}")
-    print(f"{'Relative Recon Error':<25} {pca_dimred_metrics['relative_recon_error']*100:<14.2f}% {'N/A':<15}")
+    print(f"{'Metric':<25} {'PCA':<15} {'UMAP':<15} {'Autoencoder':<15}")
+    print("-" * 70)
+    print(f"{'Trustworthiness':<25} {pca_dimred_metrics['trustworthiness']:<15.4f} {umap_dimred_metrics['trustworthiness']:<15.4f} {ae_dimred_metrics['trustworthiness']:<15.4f}")
+    print(f"{'Reconstruction Error':<25} {pca_dimred_metrics['reconstruction_error']:<15.4f} {'N/A':<15} {ae_dimred_metrics['reconstruction_error']:<15.4f}")
+    print(f"{'Relative Recon Error':<25} {pca_dimred_metrics['relative_recon_error']*100:<14.2f}% {'N/A':<15} {ae_dimred_metrics['relative_recon_error']*100:<14.2f}%")
     
     # =========================================================================
-    # Step 4: Agglomerative Clustering
+    # Step 5: Agglomerative Clustering
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 4: Agglomerative Clustering")
+    print("STEP 5: Agglomerative Clustering")
     print("=" * 70)
     
     # Define k values to test
@@ -297,23 +357,30 @@ def main():
         linkage_method="ward", method_name="UMAP Features"
     )
     
+    # Clustering on Autoencoder features
+    results_ae = run_agglomerative_clustering(
+        X_combined_ae, y_combined, k_values,
+        linkage_method="ward", method_name="Autoencoder Features"
+    )
+    
     # Store results
     results_dict = {
         "PCA": results_pca,
         "UMAP": results_umap,
+        "Autoencoder": results_ae,
     }
     
     # =========================================================================
-    # Step 5: Visualizations
+    # Step 6: Visualizations
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 5: Visualizations")
+    print("STEP 6: Visualizations")
     print("=" * 70)
     
     # Dimensionality reduction comparison
     print("\nGenerating dimensionality reduction comparison plot...")
     plot_dimred_comparison(
-        pca_dimred_metrics, umap_dimred_metrics,
+        pca_dimred_metrics, umap_dimred_metrics, ae_dimred_metrics,
         save_path=os.path.join(output_dir, "dimred_comparison.png"),
         algorithm_name="Agglomerative"
     )
@@ -336,6 +403,15 @@ def main():
         linkage_method='ward',
         distance_metric='euclidean',
         save_path=os.path.join(output_dir, "dendrogram_umap.png")
+    )
+    
+    plot_dendrogram(
+        X_combined_ae, y_combined,
+        n_clusters=n_classes,
+        title="Dendrogram - Autoencoder Features",
+        linkage_method='ward',
+        distance_metric='euclidean',
+        save_path=os.path.join(output_dir, "dendrogram_autoencoder.png")
     )
     
     # Metric comparison
@@ -366,6 +442,14 @@ def main():
     agg_umap = AgglomerativeClustering(n_clusters=n_classes, linkage="ward")
     labels_umap = agg_umap.fit_predict(X_combined_umap)
     
+    agg_ae = AgglomerativeClustering(n_clusters=n_classes, linkage="ward")
+    labels_ae = agg_ae.fit_predict(X_combined_ae)
+    
+    # For autoencoder 2D, use UMAP on the encoded features
+    from sklearn.decomposition import PCA as skPCA
+    pca_2d_ae = skPCA(n_components=2)
+    X_combined_ae_2d = pca_2d_ae.fit_transform(X_combined_ae)
+    
     plot_clustering_2d(
         X_combined_pca[:, :2], labels_pca, y_combined,
         title=f"Clustering - PCA Features (k={n_classes})",
@@ -380,6 +464,13 @@ def main():
         algorithm_name="Agglomerative"
     )
     
+    plot_clustering_2d(
+        X_combined_ae_2d, labels_ae, y_combined,
+        title=f"Clustering - Autoencoder Features (k={n_classes})",
+        save_path=os.path.join(output_dir, "clustering_autoencoder_2d.png"),
+        algorithm_name="Agglomerative"
+    )
+    
     # Summary table
     print("\nGenerating summary table...")
     summary_df = plot_summary_table(
@@ -389,14 +480,15 @@ def main():
     )
     
     # =========================================================================
-    # Step 6: Summary
+    # Step 7: Summary
     # =========================================================================
     print_summary(results_dict, n_classes)
     
     # Save results to CSV
     results_pca["method"] = "PCA"
     results_umap["method"] = "UMAP"
-    all_results = pd.concat([results_pca, results_umap], ignore_index=True)
+    results_ae["method"] = "Autoencoder"
+    all_results = pd.concat([results_pca, results_umap, results_ae], ignore_index=True)
     results_path = os.path.join(output_dir, "clustering_results.csv")
     all_results.to_csv(results_path, index=False)
     print(f"\n✓ Results saved to {results_path}")
