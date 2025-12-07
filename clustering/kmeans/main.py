@@ -1,9 +1,9 @@
 """
-Agglomerative Clustering Comparison: PCA vs UMAP
-=================================================
+K-Means Clustering Comparison: PCA vs UMAP
+===========================================
 
-This script performs agglomerative hierarchical clustering on the UMIST facial 
-recognition dataset using two unsupervised dimensionality reduction methods:
+This script performs K-means clustering on the UMIST facial recognition dataset
+using two unsupervised dimensionality reduction methods:
 
 1. PCA (Principal Component Analysis)
    - Linear dimensionality reduction
@@ -23,6 +23,7 @@ Evaluation Metrics:
 - Cluster Purity: Homogeneity of clusters w.r.t. true labels (0 to 1)
 - Normalized Mutual Information (NMI): Information shared between clusters and labels
 - Adjusted Rand Index (ARI): Similarity between clustering and true labels
+- Inertia: Sum of squared distances to nearest cluster center (lower is better)
 
 Usage:
     python main.py
@@ -35,7 +36,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import KMeans
 
 # Add parent directories to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -57,12 +58,11 @@ from shared import (
     plot_summary_table,
     plot_dimred_comparison,
 )
-from visualization import plot_dendrogram
 
 
-def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_name=""):
+def run_kmeans_clustering(X, y, k_values, n_init=10, method_name=""):
     """
-    Run agglomerative clustering for different k values and evaluate performance.
+    Run K-means clustering for different k values and evaluate performance.
     
     Parameters
     ----------
@@ -72,8 +72,8 @@ def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_n
         True labels for evaluation
     k_values : list
         List of cluster numbers to try
-    linkage_method : str
-        Linkage criterion: 'ward', 'complete', 'average', 'single'
+    n_init : int
+        Number of times K-means will be run with different centroid seeds
     method_name : str
         Name for display purposes
         
@@ -85,17 +85,19 @@ def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_n
     results = []
     
     print(f"\n{'='*70}")
-    print(f"Agglomerative Clustering on {method_name}")
+    print(f"K-Means Clustering on {method_name}")
     print(f"{'='*70}")
-    print(f"Linkage: {linkage_method}, Feature shape: {X.shape}")
+    print(f"Feature shape: {X.shape}, n_init: {n_init}")
     print("-" * 70)
     
     for k in k_values:
-        agg = AgglomerativeClustering(
+        kmeans = KMeans(
             n_clusters=k,
-            linkage=linkage_method,
+            n_init=n_init,
+            random_state=42,
+            verbose=0,
         )
-        cluster_labels = agg.fit_predict(X)
+        cluster_labels = kmeans.fit_predict(X)
 
         # Calculate metrics
         metrics = evaluate_clustering(X, y, cluster_labels)
@@ -106,12 +108,13 @@ def run_agglomerative_clustering(X, y, k_values, linkage_method="ward", method_n
             "purity": metrics["purity"],
             "nmi": metrics["nmi"],
             "ari": metrics["ari"],
+            "inertia": kmeans.inertia_,
         })
         
         print(
             f"k={k:2d} | Silhouette={metrics['silhouette']:.3f} | "
             f"Purity={metrics['purity']:.3f} | NMI={metrics['nmi']:.3f} | "
-            f"ARI={metrics['ari']:.3f}"
+            f"ARI={metrics['ari']:.3f} | Inertia={kmeans.inertia_:.1f}"
         )
     
     return pd.DataFrame(results)
@@ -180,7 +183,7 @@ def main():
     data_path = os.path.join(project_root, "umist_cropped.mat")
     
     print("=" * 70)
-    print("AGGLOMERATIVE CLUSTERING: PCA vs UMAP (Unsupervised Comparison)")
+    print("K-MEANS CLUSTERING: PCA vs UMAP (Unsupervised Comparison)")
     print("=" * 70)
     
     print("\nLoading preprocessed data...")
@@ -270,10 +273,10 @@ def main():
     print(f"{'Relative Recon Error':<25} {pca_dimred_metrics['relative_recon_error']*100:<14.2f}% {'N/A':<15}")
     
     # =========================================================================
-    # Step 4: Agglomerative Clustering
+    # Step 4: K-Means Clustering
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 4: Agglomerative Clustering")
+    print("STEP 4: K-Means Clustering")
     print("=" * 70)
     
     # Define k values to test
@@ -285,15 +288,15 @@ def main():
     print(f"\nTesting k values: {k_values}")
     
     # Clustering on PCA features
-    results_pca = run_agglomerative_clustering(
+    results_pca = run_kmeans_clustering(
         X_combined_pca, y_combined, k_values,
-        linkage_method="ward", method_name="PCA Features"
+        n_init=10, method_name="PCA Features"
     )
     
     # Clustering on UMAP features
-    results_umap = run_agglomerative_clustering(
+    results_umap = run_kmeans_clustering(
         X_combined_umap, y_combined, k_values,
-        linkage_method="ward", method_name="UMAP Features"
+        n_init=10, method_name="UMAP Features"
     )
     
     # Store results
@@ -314,27 +317,7 @@ def main():
     plot_dimred_comparison(
         pca_dimred_metrics, umap_dimred_metrics,
         save_path=os.path.join(output_dir, "dimred_comparison.png"),
-        algorithm_name="Agglomerative"
-    )
-    
-    # Dendrograms
-    print("\nGenerating dendrograms...")
-    plot_dendrogram(
-        X_combined_pca, y_combined,
-        n_clusters=n_classes,
-        title="Dendrogram - PCA Features",
-        linkage_method='ward',
-        distance_metric='euclidean',
-        save_path=os.path.join(output_dir, "dendrogram_pca.png")
-    )
-    
-    plot_dendrogram(
-        X_combined_umap, y_combined,
-        n_clusters=n_classes,
-        title="Dendrogram - UMAP Features",
-        linkage_method='ward',
-        distance_metric='euclidean',
-        save_path=os.path.join(output_dir, "dendrogram_umap.png")
+        algorithm_name="K-Means"
     )
     
     # Metric comparison
@@ -342,7 +325,7 @@ def main():
     plot_metric_comparison(
         results_dict,
         save_path=os.path.join(output_dir, "metric_comparison.png"),
-        algorithm_name="Agglomerative"
+        algorithm_name="K-Means"
     )
     
     # 2D visualizations at k = n_classes
@@ -358,25 +341,30 @@ def main():
     )
     X_combined_umap_2d = np.vstack([X_train_umap_2d, X_val_umap_2d])
     
-    # Cluster and visualize
-    agg_pca = AgglomerativeClustering(n_clusters=n_classes, linkage="ward")
-    labels_pca = agg_pca.fit_predict(X_combined_pca)
+    # For PCA 2D, use first 2 components
+    X_combined_pca_2d = X_combined_pca[:, :2]
     
-    agg_umap = AgglomerativeClustering(n_clusters=n_classes, linkage="ward")
-    labels_umap = agg_umap.fit_predict(X_combined_umap)
+    # Cluster and visualize at k = n_classes
+    kmeans_pca = KMeans(n_clusters=n_classes, n_init=10, random_state=42)
+    labels_pca = kmeans_pca.fit_predict(X_combined_pca)
     
+    kmeans_umap = KMeans(n_clusters=n_classes, n_init=10, random_state=42)
+    labels_umap = kmeans_umap.fit_predict(X_combined_umap)
+    
+    # PCA 2D plot
     plot_clustering_2d(
-        X_combined_pca[:, :2], labels_pca, y_combined,
+        X_combined_pca_2d, labels_pca, y_combined,
         title=f"Clustering - PCA Features (k={n_classes})",
         save_path=os.path.join(output_dir, "clustering_pca_2d.png"),
-        algorithm_name="Agglomerative"
+        algorithm_name="K-Means"
     )
     
+    # UMAP 2D plot
     plot_clustering_2d(
         X_combined_umap_2d, labels_umap, y_combined,
         title=f"Clustering - UMAP Features (k={n_classes})",
         save_path=os.path.join(output_dir, "clustering_umap_2d.png"),
-        algorithm_name="Agglomerative"
+        algorithm_name="K-Means"
     )
     
     # Summary table
@@ -384,7 +372,7 @@ def main():
     summary_df = plot_summary_table(
         results_dict, n_classes,
         save_path=os.path.join(output_dir, "summary_table.png"),
-        algorithm_name="Agglomerative"
+        algorithm_name="K-Means"
     )
     
     # =========================================================================
