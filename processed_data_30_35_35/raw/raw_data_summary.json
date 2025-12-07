@@ -1,0 +1,22 @@
+{
+  "n_images": 575,
+  "n_subjects": 20,
+  "n_features": 10304,
+  "pixel_value_range": [
+    1.0,
+    239.0
+  ],
+  "dataframe_shape": [
+    575,
+    10305
+  ],
+  "dataframe_columns": [
+    "pixel_0",
+    "pixel_1",
+    "pixel_2",
+    "pixel_3",
+    "pixel_4",
+    "...",
+    "subject_id"
+  ]
+}
