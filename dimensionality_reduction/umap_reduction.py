@@ -40,17 +40,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Tuple, Optional
-
-try:
-    import umap
-except ImportError:
-    raise ImportError(
-        "UMAP not installed. Install with: pip install umap-learn"
-    )
+import umap
+from data_preprocessing.pipeline import load_preprocessed_data_with_augmentation
 
 # Import pipeline loader
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_preprocessing import load_preprocessed_data
 
 sns.set_style("whitegrid")
 
@@ -253,7 +247,7 @@ def main():
     print("UMAP DIMENSIONALITY REDUCTION")
     print("=" * 70)
     
-    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data(
+    X_train, X_val, X_test, y_train, y_val, y_test, scaler = load_preprocessed_data_with_augmentation(
         dataset_path=path
     )
     print(f"Loaded data: Train={X_train.shape}, Val={X_val.shape}, Test={X_test.shape}")
