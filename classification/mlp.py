@@ -31,6 +31,8 @@ from tensorflow.keras.utils import to_categorical
 import keras_tuner as kt
 
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+import joblib
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -89,6 +91,11 @@ def apply_pca_reduction(X_train, X_val, X_test, variance_threshold=0.95):
     
     print(f"\nReduced dimensions: {X_train.shape[1]} -> {X_train_pca.shape[1]}")
     
+    # Save PCA model
+    pca_path = os.path.join(OUTPUT_DIR, 'pca_model.joblib')
+    joblib.dump(pca, pca_path)
+    print(f"PCA model saved to: {pca_path}")
+    
     return X_train_pca, X_val_pca, X_test_pca, pca, n_components
 
 
@@ -135,12 +142,73 @@ def apply_kmeans_features(X_train, X_val, X_test, n_clusters=20, n_init=10):
     
     print(f"Distance features shape: {X_train_dist.shape}")
     
+    # Save K-means model
+    kmeans_path = os.path.join(OUTPUT_DIR, 'kmeans_model.joblib')
+    joblib.dump(kmeans, kmeans_path)
+    print(f"K-means model saved to: {kmeans_path}")
+    
     return X_train_dist, X_val_dist, X_test_dist, kmeans
 
 
-def combine_features(X_original, X_distances):
-    """Concatenate original features with K-means distance features."""
-    return np.hstack([X_original, X_distances])
+def apply_gmm_features(X_train, X_val, X_test, n_components=20, n_init=5):
+    """
+    Apply Gaussian Mixture Model and compute soft probability features.
+    
+    Unlike K-means which gives hard cluster assignments, GMM provides
+    soft probabilities of belonging to each cluster (component).
+    
+    Parameters
+    ----------
+    X_train, X_val, X_test : np.ndarray
+        Feature matrices (PCA-reduced)
+    n_components : int
+        Number of Gaussian components (typically = number of classes)
+    n_init : int
+        Number of GMM initializations
+        
+    Returns
+    -------
+    X_train_probs, X_val_probs, X_test_probs : np.ndarray
+        Soft probability features (n_samples, n_components)
+    gmm : GaussianMixture
+        Fitted GMM model
+    """
+    print("\n" + "=" * 70)
+    print(f"GAUSSIAN MIXTURE MODEL (n_components={n_components})")
+    print("=" * 70)
+    
+    gmm = GaussianMixture(
+        n_components=n_components,
+        n_init=n_init,
+        covariance_type='full',
+        random_state=42,
+        verbose=0
+    )
+    
+    # Fit on training data
+    gmm.fit(X_train)
+    print(f"GMM fitted with {n_components} components")
+    print(f"Converged: {gmm.converged_}")
+    print(f"Log-likelihood (train): {gmm.score(X_train):.4f}")
+    
+    # Compute soft probabilities for all sets
+    X_train_probs = gmm.predict_proba(X_train)  # (n_samples, n_components)
+    X_val_probs = gmm.predict_proba(X_val)
+    X_test_probs = gmm.predict_proba(X_test)
+    
+    print(f"Soft probability features shape: {X_train_probs.shape}")
+    
+    # Save GMM model
+    gmm_path = os.path.join(OUTPUT_DIR, 'gmm_model.joblib')
+    joblib.dump(gmm, gmm_path)
+    print(f"GMM model saved to: {gmm_path}")
+    
+    return X_train_probs, X_val_probs, X_test_probs, gmm
+
+
+def combine_features(*feature_arrays):
+    """Concatenate multiple feature arrays horizontally."""
+    return np.hstack(feature_arrays)
 
 
 def build_mlp_model(hp, input_dim, num_classes):
@@ -241,7 +309,7 @@ def run_hyperband_tuning(X_train, X_val, y_train_oh, y_val_oh, num_classes,
     
     print(f"\nInput dimension: {input_dim}")
     print(f"Running Hyperband search (max_epochs={max_epochs})...")
-    print("-" * 70)  # Separator before tuner output
+    
     
     early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
     
@@ -253,13 +321,17 @@ def run_hyperband_tuning(X_train, X_val, y_train_oh, y_val_oh, num_classes,
         verbose=0
     )
     
-    print("-" * 70)  # Separator after tuner output
+   
     best_hps = tuner.get_best_hyperparameters()[0]
+    
+    # Get best validation accuracy from the oracle
+    best_trial = tuner.oracle.get_best_trials(num_trials=1)[0]
+    best_val_acc = best_trial.metrics.get_best_value('val_accuracy')
     
     print("\n" + "-" * 50)
     print("BEST HYPERPARAMETERS")
     print("-" * 50)
-    print(f"  Val Accuracy: {tuner.get_best_trials(num_trials=1)[0].score:.4f}")
+    print(f"  Val Accuracy: {best_val_acc:.4f}")
     print(f"  Number of layers: {best_hps.get('n_layers')}")
     print(f"  Units per layer: {best_hps.get('units')}")
     print(f"  Dropout: {best_hps.get('dropout')}")
@@ -441,29 +513,43 @@ def plot_kmeans_clusters(X_pca, y, kmeans, title='K-Means Clusters'):
     plt.show()
 
 
-def print_comparison_summary(results_pca, results_kmeans):
-    """Print summary comparison table."""
+def print_comparison_summary(results_dict):
+    """Print summary comparison table for all models."""
     print("\n" + "=" * 70)
     print("FINAL COMPARISON SUMMARY")
     print("=" * 70)
     
     metrics = ['accuracy', 'precision', 'recall', 'f1']
     
-    print(f"\n{'Model':<25} {'Accuracy':<12} {'Precision':<12} {'Recall':<12} {'F1':<12}")
-    print("-" * 73)
+    print(f"\n{'Model':<30} {'Accuracy':<12} {'Precision':<12} {'Recall':<12} {'F1':<12}")
+    print("-" * 78)
     
-    for name, results in [('MLP + PCA', results_pca), ('MLP + PCA + K-Means', results_kmeans)]:
+    for name, results in results_dict.items():
         test = results['Test']
-        print(f"{name:<25} {test['accuracy']:<12.4f} {test['precision']:<12.4f} "
+        print(f"{name:<30} {test['accuracy']:<12.4f} {test['precision']:<12.4f} "
               f"{test['recall']:<12.4f} {test['f1']:<12.4f}")
     
-    # Improvement
-    print("\n" + "-" * 73)
-    print("Improvement from K-Means features:")
+    # Find baseline (first model) and compute improvements
+    baseline_name = list(results_dict.keys())[0]
+    baseline_results = results_dict[baseline_name]
+    
+    print("\n" + "-" * 78)
+    print(f"Improvements over {baseline_name}:")
+    
+    for name, results in list(results_dict.items())[1:]:
+        print(f"\n  {name}:")
+        for metric in metrics:
+            diff = results['Test'][metric] - baseline_results['Test'][metric]
+            sign = '+' if diff >= 0 else ''
+            print(f"    {metric.capitalize()}: {sign}{diff:.4f} ({sign}{diff*100:.2f}%)")
+    
+    # Best model per metric
+    print("\n" + "-" * 78)
+    print("Best model per metric:")
     for metric in metrics:
-        diff = results_kmeans['Test'][metric] - results_pca['Test'][metric]
-        sign = '+' if diff >= 0 else ''
-        print(f"  {metric.capitalize()}: {sign}{diff:.4f} ({sign}{diff*100:.2f}%)")
+        best_model = max(results_dict.keys(), key=lambda k: results_dict[k]['Test'][metric])
+        best_val = results_dict[best_model]['Test'][metric]
+        print(f"  {metric.capitalize()}: {best_model} ({best_val:.4f})")
 
 
 def main():
@@ -498,11 +584,11 @@ def main():
     )
     
     # Combine PCA features with K-means distance features
-    X_train_combined = combine_features(X_train_pca, X_train_dist)
-    X_val_combined = combine_features(X_val_pca, X_val_dist)
-    X_test_combined = combine_features(X_test_pca, X_test_dist)
+    X_train_kmeans = combine_features(X_train_pca, X_train_dist)
+    X_val_kmeans = combine_features(X_val_pca, X_val_dist)
+    X_test_kmeans = combine_features(X_test_pca, X_test_dist)
     
-    print(f"\nCombined features shape: {X_train_combined.shape}")
+    print(f"\nPCA + K-means features shape: {X_train_kmeans.shape}")
     print(f"  PCA features: {X_train_pca.shape[1]}")
     print(f"  K-means distance features: {X_train_dist.shape[1]}")
     
@@ -510,31 +596,39 @@ def main():
     plot_kmeans_clusters(X_train_pca, y_train, kmeans)
     
     # =========================================================================
-    # Step 4: Train MLP with PCA features only
+    # Step 4: Apply GMM and Get Soft Probability Features
+    # =========================================================================
+    X_train_probs, X_val_probs, X_test_probs, gmm = apply_gmm_features(
+        X_train_pca, X_val_pca, X_test_pca, n_components=num_classes
+    )
+    
+    # Combine PCA features with GMM soft probability features
+    X_train_gmm = combine_features(X_train_pca, X_train_probs)
+    X_val_gmm = combine_features(X_val_pca, X_val_probs)
+    X_test_gmm = combine_features(X_test_pca, X_test_probs)
+    
+    print(f"\nPCA + GMM features shape: {X_train_gmm.shape}")
+    print(f"  PCA features: {X_train_pca.shape[1]}")
+    print(f"  GMM probability features: {X_train_probs.shape[1]}")
+    
+    # =========================================================================
+    # Step 5: Train MLP with PCA features only
     # =========================================================================
     print("\n" + "#" * 70)
     print("# MODEL 1: MLP with PCA features only")
     print("#" * 70)
     
-    # Check if model exists
-    model_pca_path = os.path.join(OUTPUT_DIR, 'mlp_pca.keras')
+    # Hyperparameter tuning
+    best_model_pca, best_hps_pca = run_hyperband_tuning(
+        X_train_pca, X_val_pca, y_train_oh, y_val_oh, num_classes,
+        tuner_name='mlp_pca', max_epochs=50
+    )
     
-    if os.path.exists(model_pca_path):
-        print(f"\nLoading existing model from: {model_pca_path}")
-        model_pca = keras.models.load_model(model_pca_path)
-        history_pca = None
-    else:
-        # Hyperparameter tuning
-        best_model_pca, best_hps_pca = run_hyperband_tuning(
-            X_train_pca, X_val_pca, y_train_oh, y_val_oh, num_classes,
-            tuner_name='mlp_pca', max_epochs=50
-        )
-        
-        # Train final model
-        model_pca, history_pca = train_final_model(
-            best_hps_pca, X_train_pca, X_val_pca, y_train_oh, y_val_oh,
-            num_classes, model_name='mlp_pca'
-        )
+    # Train final model
+    model_pca, history_pca = train_final_model(
+        best_hps_pca, X_train_pca, X_val_pca, y_train_oh, y_val_oh,
+        num_classes, model_name='mlp_pca'
+    )
     
     # Evaluate
     results_pca, _ = evaluate_model(
@@ -542,55 +636,76 @@ def main():
         y_train, y_val, y_test, model_name='MLP + PCA'
     )
     
-    if history_pca:
-        plot_training_history(history_pca, title='MLP + PCA', save_name='training_mlp_pca.png')
+    plot_training_history(history_pca, title='MLP + PCA', save_name='training_mlp_pca.png')
     
     # =========================================================================
-    # Step 5: Train MLP with PCA + K-means distance features
+    # Step 6: Train MLP with PCA + K-means distance features
     # =========================================================================
     print("\n" + "#" * 70)
     print("# MODEL 2: MLP with PCA + K-Means distance features")
     print("#" * 70)
     
-    # Check if model exists
-    model_kmeans_path = os.path.join(OUTPUT_DIR, 'mlp_pca_kmeans.keras')
+    # Hyperparameter tuning
+    best_model_kmeans, best_hps_kmeans = run_hyperband_tuning(
+        X_train_kmeans, X_val_kmeans, y_train_oh, y_val_oh, num_classes,
+        tuner_name='mlp_pca_kmeans', max_epochs=50
+    )
     
-    if os.path.exists(model_kmeans_path):
-        print(f"\nLoading existing model from: {model_kmeans_path}")
-        model_kmeans = keras.models.load_model(model_kmeans_path)
-        history_kmeans = None
-    else:
-        # Hyperparameter tuning
-        best_model_kmeans, best_hps_kmeans = run_hyperband_tuning(
-            X_train_combined, X_val_combined, y_train_oh, y_val_oh, num_classes,
-            tuner_name='mlp_pca_kmeans', max_epochs=50
-        )
-        
-        # Train final model
-        model_kmeans, history_kmeans = train_final_model(
-            best_hps_kmeans, X_train_combined, X_val_combined, y_train_oh, y_val_oh,
-            num_classes, model_name='mlp_pca_kmeans'
-        )
+    # Train final model
+    model_kmeans, history_kmeans = train_final_model(
+        best_hps_kmeans, X_train_kmeans, X_val_kmeans, y_train_oh, y_val_oh,
+        num_classes, model_name='mlp_pca_kmeans'
+    )
     
     # Evaluate
     results_kmeans, _ = evaluate_model(
-        model_kmeans, X_train_combined, X_val_combined, X_test_combined,
+        model_kmeans, X_train_kmeans, X_val_kmeans, X_test_kmeans,
         y_train, y_val, y_test, model_name='MLP + PCA + K-Means'
     )
     
-    if history_kmeans:
-        plot_training_history(history_kmeans, title='MLP + PCA + K-Means', 
-                             save_name='training_mlp_pca_kmeans.png')
+    plot_training_history(history_kmeans, title='MLP + PCA + K-Means', 
+                         save_name='training_mlp_pca_kmeans.png')
     
     # =========================================================================
-    # Step 6: Compare Results
+    # Step 7: Train MLP with PCA + GMM soft probability features
     # =========================================================================
-    plot_metrics_comparison({
+    print("\n" + "#" * 70)
+    print("# MODEL 3: MLP with PCA + GMM soft probability features")
+    print("#" * 70)
+    
+    # Hyperparameter tuning
+    best_model_gmm, best_hps_gmm = run_hyperband_tuning(
+        X_train_gmm, X_val_gmm, y_train_oh, y_val_oh, num_classes,
+        tuner_name='mlp_pca_gmm', max_epochs=50
+    )
+    
+    # Train final model
+    model_gmm, history_gmm = train_final_model(
+        best_hps_gmm, X_train_gmm, X_val_gmm, y_train_oh, y_val_oh,
+        num_classes, model_name='mlp_pca_gmm'
+    )
+    
+    # Evaluate
+    results_gmm, _ = evaluate_model(
+        model_gmm, X_train_gmm, X_val_gmm, X_test_gmm,
+        y_train, y_val, y_test, model_name='MLP + PCA + GMM'
+    )
+    
+    plot_training_history(history_gmm, title='MLP + PCA + GMM', 
+                         save_name='training_mlp_pca_gmm.png')
+    
+    # =========================================================================
+    # Step 8: Compare Results
+    # =========================================================================
+    all_results = {
         'MLP + PCA': results_pca,
-        'MLP + PCA + K-Means': results_kmeans
-    }, title='MLP Models')
+        'MLP + PCA + K-Means': results_kmeans,
+        'MLP + PCA + GMM': results_gmm
+    }
     
-    print_comparison_summary(results_pca, results_kmeans)
+    plot_metrics_comparison(all_results, title='MLP Models')
+    
+    print_comparison_summary(all_results)
     
     print("\n" + "=" * 70)
     print("DONE")
