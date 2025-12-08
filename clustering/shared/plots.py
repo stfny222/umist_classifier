@@ -281,3 +281,86 @@ def plot_dimred_comparison(pca_metrics, umap_metrics, ae_metrics=None, save_path
         print(f"Saved: {save_path}")
     
     plt.show()
+
+
+def plot_cluster_images_comparison(X_original, labels_dict, y_true, n_clusters_to_show=5, 
+                                    n_images_per_cluster=6, save_path=None):
+    """
+    Plot actual face images grouped by cluster assignments for multiple methods.
+    
+    Parameters
+    ----------
+    X_original : np.ndarray
+        Original flattened images (n_samples, n_features)
+    labels_dict : dict
+        Dictionary mapping method name -> cluster labels array
+    y_true : np.ndarray
+        True labels for reference
+    n_clusters_to_show : int
+        Number of clusters to display
+    n_images_per_cluster : int
+        Number of images to show per cluster
+    save_path : str, optional
+        Path to save the figure
+    """
+    n_methods = len(labels_dict)
+    img_height, img_width = 112, 92
+    
+    fig, axes = plt.subplots(
+        n_methods * n_clusters_to_show, n_images_per_cluster + 1,
+        figsize=(2 * (n_images_per_cluster + 1), 2 * n_methods * n_clusters_to_show)
+    )
+    
+    row_idx = 0
+    for method_idx, (method_name, cluster_labels) in enumerate(labels_dict.items()):
+        unique_clusters = np.unique(cluster_labels)[:n_clusters_to_show]
+        
+        for cluster_id in unique_clusters:
+            # Get indices of images in this cluster
+            cluster_mask = cluster_labels == cluster_id
+            cluster_indices = np.where(cluster_mask)[0]
+            
+            # Get true labels for this cluster to show purity
+            true_labels_in_cluster = y_true[cluster_mask]
+            most_common_label = np.bincount(true_labels_in_cluster).argmax()
+            purity = np.sum(true_labels_in_cluster == most_common_label) / len(true_labels_in_cluster)
+            
+            # Sample images from this cluster
+            n_to_show = min(n_images_per_cluster, len(cluster_indices))
+            sample_indices = np.random.choice(cluster_indices, n_to_show, replace=False)
+            
+            # First column: cluster info
+            ax_info = axes[row_idx, 0]
+            ax_info.axis('off')
+            ax_info.text(0.5, 0.5, 
+                        f"{method_name}\nCluster {cluster_id}\n({len(cluster_indices)} imgs)\nPurity: {purity:.0%}",
+                        ha='center', va='center', fontsize=9, fontweight='bold',
+                        transform=ax_info.transAxes,
+                        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+            
+            # Show images
+            for img_idx, sample_idx in enumerate(sample_indices):
+                ax = axes[row_idx, img_idx + 1]
+                img = X_original[sample_idx].reshape(img_height, img_width)
+                ax.imshow(img, cmap='gray')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # Show true label as small text
+                ax.set_title(f"ID:{y_true[sample_idx]}", fontsize=7)
+            
+            # Hide unused subplots
+            for img_idx in range(n_to_show, n_images_per_cluster):
+                axes[row_idx, img_idx + 1].axis('off')
+            
+            row_idx += 1
+    
+    plt.suptitle("Cluster Contents Comparison: Actual Face Images by Cluster\n(ID = True Subject Label)", 
+                 fontsize=14, fontweight='bold', y=1.01)
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {save_path}")
+    
+    plt.show()
