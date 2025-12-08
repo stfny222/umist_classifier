@@ -18,6 +18,7 @@ from .plots import (
     plot_clustering_2d,
     plot_summary_table,
     plot_dimred_comparison,
+    plot_cluster_images_comparison,
 )
 
 __all__ = [
@@ -35,4 +36,5 @@ __all__ = [
     "plot_clustering_2d",
     "plot_summary_table",
     "plot_dimred_comparison",
+    "plot_cluster_images_comparison",
 ]
