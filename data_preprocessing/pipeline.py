@@ -33,7 +33,7 @@ from .data_splitter import split_and_normalize_data, load_splits
 
 def load_preprocessed_data(dataset_path='umist_cropped.mat',
                           cache_dir='processed_data',
-                          train_ratio=0.60, val_ratio=0.20, test_ratio=0.20,
+                          train_ratio=0.30, val_ratio=0.35, test_ratio=0.35,
                           random_state=42):
     """
     Master function: Load preprocessed data with intelligent multi-level caching.
@@ -127,9 +127,9 @@ def load_preprocessed_data_with_augmentation(
     dataset_path='umist_cropped.mat',
     cache_dir='processed_data',
     augmentation_factor=5,
-    train_ratio=0.60,
-    val_ratio=0.20,
-    test_ratio=0.20,
+    train_ratio=0.30,
+    val_ratio=0.35,
+    test_ratio=0.35,
     random_state=42
 ):
     """
@@ -150,7 +150,7 @@ def load_preprocessed_data_with_augmentation(
         - 0 or 1: No augmentation (returns original data)
         - 5: 5x augmentation (345 → 1725 training samples)
     train_ratio, val_ratio, test_ratio : float, optional
-        Split ratios (default: 0.60, 0.20, 0.20)
+        Split ratios (default: 0.30, 0.35, 0.35)
     random_state : int, optional
         Random seed (default: 42)
 

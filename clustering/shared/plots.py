@@ -190,7 +190,7 @@ def plot_summary_table(results_dict, n_classes, save_path=None, algorithm_name="
     return summary_df
 
 
-def plot_dimred_comparison(pca_metrics, umap_metrics, save_path=None, algorithm_name=""):
+def plot_dimred_comparison(pca_metrics, umap_metrics, ae_metrics=None, save_path=None, algorithm_name=""):
     """
     Plot comparison of dimensionality reduction quality metrics.
     
@@ -200,23 +200,30 @@ def plot_dimred_comparison(pca_metrics, umap_metrics, save_path=None, algorithm_
         Metrics from PCA dimensionality reduction
     umap_metrics : dict
         Metrics from UMAP dimensionality reduction
+    ae_metrics : dict, optional
+        Metrics from Autoencoder dimensionality reduction
     save_path : str, optional
         Path to save the figure
     algorithm_name : str, optional
         Name of clustering algorithm (e.g., "K-Means", "Agglomerative")
     """
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     
     # Plot 1: Trustworthiness comparison (bar chart)
-    methods = ['PCA', 'UMAP']
-    trust_values = [pca_metrics['trustworthiness'], umap_metrics['trustworthiness']]
-    colors = ['steelblue', 'darkorange']
+    if ae_metrics is not None:
+        methods = ['PCA', 'UMAP', 'Autoencoder']
+        trust_values = [pca_metrics['trustworthiness'], umap_metrics['trustworthiness'], ae_metrics['trustworthiness']]
+        colors = ['steelblue', 'darkorange', 'green']
+    else:
+        methods = ['PCA', 'UMAP']
+        trust_values = [pca_metrics['trustworthiness'], umap_metrics['trustworthiness']]
+        colors = ['steelblue', 'darkorange']
     
     bars = axes[0].bar(methods, trust_values, color=colors, edgecolor='black', linewidth=1.2)
     axes[0].set_ylabel('Trustworthiness Score', fontsize=12)
     axes[0].set_title('Trustworthiness\n(Local Neighborhood Preservation)', fontsize=12, fontweight='bold')
     axes[0].set_ylim(0, 1.05)
-    axes[0].axhline(y=1.0, color='green', linestyle='--', alpha=0.5, label='Perfect (1.0)')
+    axes[0].axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, label='Perfect (1.0)')
     
     # Add value labels on bars
     for bar, val in zip(bars, trust_values):
@@ -229,20 +236,31 @@ def plot_dimred_comparison(pca_metrics, umap_metrics, save_path=None, algorithm_
     # Plot 2: Summary metrics table
     axes[1].axis('off')
     
-    table_data = [
-        ['Metric', 'PCA', 'UMAP'],
-        ['Trustworthiness', f"{pca_metrics['trustworthiness']:.4f}", f"{umap_metrics['trustworthiness']:.4f}"],
-        ['Reconstruction Error', f"{pca_metrics['reconstruction_error']:.4f}", 'N/A'],
-        ['Relative Recon Error', f"{pca_metrics['relative_recon_error']*100:.2f}%", 'N/A'],
-        ['Components', str(pca_metrics['n_components']), str(umap_metrics['n_components'])],
-    ]
+    if ae_metrics is not None:
+        table_data = [
+            ['Metric', 'PCA', 'UMAP', 'Autoencoder'],
+            ['Trustworthiness', f"{pca_metrics['trustworthiness']:.4f}", f"{umap_metrics['trustworthiness']:.4f}", f"{ae_metrics['trustworthiness']:.4f}"],
+            ['Reconstruction Error', f"{pca_metrics['reconstruction_error']:.4f}", 'N/A', f"{ae_metrics.get('reconstruction_error', 'N/A'):.4f}" if isinstance(ae_metrics.get('reconstruction_error'), (int, float)) else 'N/A'],
+            ['Relative Recon Error', f"{pca_metrics['relative_recon_error']*100:.2f}%", 'N/A', f"{ae_metrics.get('relative_recon_error', 0)*100:.2f}%" if isinstance(ae_metrics.get('relative_recon_error'), (int, float)) else 'N/A'],
+            ['Components', str(pca_metrics['n_components']), str(umap_metrics['n_components']), str(ae_metrics['n_components'])],
+        ]
+        col_colors = ['lightsteelblue'] * 4
+    else:
+        table_data = [
+            ['Metric', 'PCA', 'UMAP'],
+            ['Trustworthiness', f"{pca_metrics['trustworthiness']:.4f}", f"{umap_metrics['trustworthiness']:.4f}"],
+            ['Reconstruction Error', f"{pca_metrics['reconstruction_error']:.4f}", 'N/A'],
+            ['Relative Recon Error', f"{pca_metrics['relative_recon_error']*100:.2f}%", 'N/A'],
+            ['Components', str(pca_metrics['n_components']), str(umap_metrics['n_components'])],
+        ]
+        col_colors = ['lightsteelblue'] * 3
     
     table = axes[1].table(
         cellText=table_data[1:],
         colLabels=table_data[0],
         cellLoc='center',
         loc='center',
-        colColours=['lightsteelblue'] * 3
+        colColours=col_colors
     )
     table.auto_set_font_size(False)
     table.set_fontsize(11)
@@ -255,6 +273,89 @@ def plot_dimred_comparison(pca_metrics, umap_metrics, save_path=None, algorithm_
         dimred_title = f"{algorithm_name}: {dimred_title}"
     plt.suptitle(dimred_title, 
                  fontsize=14, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {save_path}")
+    
+    plt.show()
+
+
+def plot_cluster_images_comparison(X_original, labels_dict, y_true, n_clusters_to_show=5, 
+                                    n_images_per_cluster=6, save_path=None):
+    """
+    Plot actual face images grouped by cluster assignments for multiple methods.
+    
+    Parameters
+    ----------
+    X_original : np.ndarray
+        Original flattened images (n_samples, n_features)
+    labels_dict : dict
+        Dictionary mapping method name -> cluster labels array
+    y_true : np.ndarray
+        True labels for reference
+    n_clusters_to_show : int
+        Number of clusters to display
+    n_images_per_cluster : int
+        Number of images to show per cluster
+    save_path : str, optional
+        Path to save the figure
+    """
+    n_methods = len(labels_dict)
+    img_height, img_width = 112, 92
+    
+    fig, axes = plt.subplots(
+        n_methods * n_clusters_to_show, n_images_per_cluster + 1,
+        figsize=(2 * (n_images_per_cluster + 1), 2 * n_methods * n_clusters_to_show)
+    )
+    
+    row_idx = 0
+    for method_idx, (method_name, cluster_labels) in enumerate(labels_dict.items()):
+        unique_clusters = np.unique(cluster_labels)[:n_clusters_to_show]
+        
+        for cluster_id in unique_clusters:
+            # Get indices of images in this cluster
+            cluster_mask = cluster_labels == cluster_id
+            cluster_indices = np.where(cluster_mask)[0]
+            
+            # Get true labels for this cluster to show purity
+            true_labels_in_cluster = y_true[cluster_mask]
+            most_common_label = np.bincount(true_labels_in_cluster).argmax()
+            purity = np.sum(true_labels_in_cluster == most_common_label) / len(true_labels_in_cluster)
+            
+            # Sample images from this cluster
+            n_to_show = min(n_images_per_cluster, len(cluster_indices))
+            sample_indices = np.random.choice(cluster_indices, n_to_show, replace=False)
+            
+            # First column: cluster info
+            ax_info = axes[row_idx, 0]
+            ax_info.axis('off')
+            ax_info.text(0.5, 0.5, 
+                        f"{method_name}\nCluster {cluster_id}\n({len(cluster_indices)} imgs)\nPurity: {purity:.0%}",
+                        ha='center', va='center', fontsize=9, fontweight='bold',
+                        transform=ax_info.transAxes,
+                        bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+            
+            # Show images
+            for img_idx, sample_idx in enumerate(sample_indices):
+                ax = axes[row_idx, img_idx + 1]
+                img = X_original[sample_idx].reshape(img_height, img_width)
+                ax.imshow(img, cmap='gray')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # Show true label as small text
+                ax.set_title(f"ID:{y_true[sample_idx]}", fontsize=7)
+            
+            # Hide unused subplots
+            for img_idx in range(n_to_show, n_images_per_cluster):
+                axes[row_idx, img_idx + 1].axis('off')
+            
+            row_idx += 1
+    
+    plt.suptitle("Cluster Contents Comparison: Actual Face Images by Cluster\n(ID = True Subject Label)", 
+                 fontsize=14, fontweight='bold', y=1.01)
     plt.tight_layout()
     
     if save_path:

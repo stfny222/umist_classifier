@@ -1,9 +1,9 @@
 """
-K-Means Clustering Comparison: PCA vs UMAP
-===========================================
+K-Means Clustering Comparison: PCA vs UMAP vs Autoencoding
+===========================================================
 
 This script performs K-means clustering on the UMIST facial recognition dataset
-using two unsupervised dimensionality reduction methods:
+using four unsupervised dimensionality reduction methods:
 
 1. PCA (Principal Component Analysis)
    - Linear dimensionality reduction
@@ -15,7 +15,18 @@ using two unsupervised dimensionality reduction methods:
    - Preserves local and global structure
    - Better at preserving cluster structure
 
-Both methods are fully UNSUPERVISED, making this a valid unsupervised learning
+3. Standard Convolutional Autoencoder
+   - Neural network-based dimensionality reduction
+   - Learns non-linear feature representations
+   - ReLU activations
+
+4. Improved Autoencoder with SSIM Loss
+   - Enhanced autoencoder with perceptual loss
+   - LeakyReLU activations
+   - L2 regularization and dropout
+   - Optimized for structural similarity
+
+All methods are fully UNSUPERVISED, making this a valid unsupervised learning
 pipeline for clustering evaluation.
 
 Evaluation Metrics:
@@ -24,6 +35,8 @@ Evaluation Metrics:
 - Normalized Mutual Information (NMI): Information shared between clusters and labels
 - Adjusted Rand Index (ARI): Similarity between clustering and true labels
 - Inertia: Sum of squared distances to nearest cluster center (lower is better)
+- Trustworthiness: Local neighborhood preservation in reduced space
+- Continuity: Global structure preservation in reduced space
 
 Usage:
     python main.py
@@ -35,8 +48,7 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-
-from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
 # Add parent directories to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -47,8 +59,6 @@ from dimensionality_reduction.pca import determine_pca_components, fit_and_trans
 from dimensionality_reduction.umap_reduction import fit_and_transform_umap
 
 from shared import (
-    evaluate_clustering, 
-    print_metrics,
     evaluate_dimensionality_reduction,
     print_dimred_metrics,
 )
@@ -59,115 +69,13 @@ from shared import (
     plot_dimred_comparison,
 )
 
-
-def run_kmeans_clustering(X, y, k_values, n_init=10, method_name=""):
-    """
-    Run K-means clustering for different k values and evaluate performance.
-    
-    Parameters
-    ----------
-    X : np.ndarray
-        Feature matrix (n_samples, n_features)
-    y : np.ndarray
-        True labels for evaluation
-    k_values : list
-        List of cluster numbers to try
-    n_init : int
-        Number of times K-means will be run with different centroid seeds
-    method_name : str
-        Name for display purposes
-        
-    Returns
-    -------
-    pd.DataFrame
-        Results dataframe with metrics for each k value
-    """
-    results = []
-    
-    print(f"\n{'='*70}")
-    print(f"K-Means Clustering on {method_name}")
-    print(f"{'='*70}")
-    print(f"Feature shape: {X.shape}, n_init: {n_init}")
-    print("-" * 70)
-    
-    for k in k_values:
-        kmeans = KMeans(
-            n_clusters=k,
-            n_init=n_init,
-            random_state=42,
-            verbose=0,
-        )
-        cluster_labels = kmeans.fit_predict(X)
-
-        # Calculate metrics
-        metrics = evaluate_clustering(X, y, cluster_labels)
-        
-        results.append({
-            "k": k,
-            "silhouette": metrics["silhouette"],
-            "purity": metrics["purity"],
-            "nmi": metrics["nmi"],
-            "ari": metrics["ari"],
-            "inertia": kmeans.inertia_,
-        })
-        
-        print(
-            f"k={k:2d} | Silhouette={metrics['silhouette']:.3f} | "
-            f"Purity={metrics['purity']:.3f} | NMI={metrics['nmi']:.3f} | "
-            f"ARI={metrics['ari']:.3f} | Inertia={kmeans.inertia_:.1f}"
-        )
-    
-    return pd.DataFrame(results)
-
-
-def print_summary(results_dict, n_classes):
-    """
-    Print summary comparison of results at k = n_classes.
-    
-    Parameters
-    ----------
-    results_dict : dict
-        Dictionary mapping method name -> results DataFrame
-    n_classes : int
-        True number of classes
-    """
-    print("\n" + "=" * 70)
-    print(f"SUMMARY: Results at k={n_classes} (true number of classes)")
-    print("=" * 70)
-    
-    metrics = ["silhouette", "purity", "nmi", "ari"]
-    
-    print(f"\n{'Method':<15} {'Silhouette':<12} {'Purity':<12} {'NMI':<12} {'ARI':<12}")
-    print("-" * 63)
-    
-    for method_name, results in results_dict.items():
-        row = results[results["k"] == n_classes]
-        if not row.empty:
-            print(
-                f"{method_name:<15} "
-                f"{row['silhouette'].values[0]:<12.4f} "
-                f"{row['purity'].values[0]:<12.4f} "
-                f"{row['nmi'].values[0]:<12.4f} "
-                f"{row['ari'].values[0]:<12.4f}"
-            )
-    
-    # Determine winner for each metric
-    print("\n" + "-" * 63)
-    print("Best method per metric:")
-    
-    for metric in metrics:
-        best_method = None
-        best_value = -np.inf
-        
-        for method_name, results in results_dict.items():
-            row = results[results["k"] == n_classes]
-            if not row.empty:
-                value = row[metric].values[0]
-                if value > best_value:
-                    best_value = value
-                    best_method = method_name
-        
-        print(f"  {metric.upper()}: {best_method} ({best_value:.4f})")
+# Import utilities from clustering_utils
+from clustering_utils import (
+    find_optimal_k,
+    print_optimal_k_summary,
+    extract_autoencoder_features,
+    run_clustering_pipeline,
+)
 
 
 def main():
@@ -183,7 +91,7 @@ def main():
     data_path = os.path.join(project_root, "umist_cropped.mat")
     
     print("=" * 70)
-    print("K-MEANS CLUSTERING: PCA vs UMAP (Unsupervised Comparison)")
+    print("K-MEANS CLUSTERING: PCA vs UMAP vs Autoencoding (Unsupervised Comparison)")
     print("=" * 70)
     
     print("\nLoading preprocessed data...")
@@ -236,10 +144,43 @@ def main():
     X_combined_umap = np.vstack([X_train_umap, X_val_umap])
     
     # =========================================================================
-    # Step 3: Evaluate Dimensionality Reduction Quality
+    # Step 3: Autoencoder Dimensionality Reduction
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 3: Dimensionality Reduction Quality Evaluation")
+    print("STEP 3: Autoencoder Dimensionality Reduction")
+    print("=" * 70)
+    
+    # Use n_pca_components as latent dimension for fair comparison
+    latent_dim = n_pca_components
+    
+    # Standard Autoencoder
+    X_train_ae, X_val_ae, X_test_ae, encoder_ae = extract_autoencoder_features(
+        X_train, X_val, X_test,
+        latent_dim=latent_dim,
+        improved=False,
+        epochs=50,
+        batch_size=32,
+        method_name=f"Standard Autoencoder (latent_dim={latent_dim})"
+    )
+    X_combined_ae = np.vstack([X_train_ae, X_val_ae])
+    
+    # Improved Autoencoder with SSIM loss
+    print("\n" + "-" * 70)
+    X_train_ae_improved, X_val_ae_improved, X_test_ae_improved, encoder_ae_improved = extract_autoencoder_features(
+        X_train, X_val, X_test,
+        latent_dim=latent_dim,
+        improved=True,
+        epochs=50,
+        batch_size=32,
+        method_name=f"Improved Autoencoder with SSIM (latent_dim={latent_dim})"
+    )
+    X_combined_ae_improved = np.vstack([X_train_ae_improved, X_val_ae_improved])
+    
+    # =========================================================================
+    # Step 4: Evaluate Dimensionality Reduction Quality
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 4: Dimensionality Reduction Quality Evaluation")
     print("=" * 70)
     
     # Evaluate PCA
@@ -262,76 +203,75 @@ def main():
     )
     print_dimred_metrics(umap_dimred_metrics)
     
+    # Evaluate Standard Autoencoder
+    print("\nEvaluating Standard Autoencoder...")
+    ae_dimred_metrics = evaluate_dimensionality_reduction(
+        X_combined, X_combined_ae,
+        n_neighbors=10,
+        pca_model=None,  # Autoencoder is non-linear
+        method_name="Standard Autoencoder"
+    )
+    print_dimred_metrics(ae_dimred_metrics)
+    
+    # Evaluate Improved Autoencoder
+    print("\nEvaluating Improved Autoencoder (SSIM)...")
+    ae_improved_dimred_metrics = evaluate_dimensionality_reduction(
+        X_combined, X_combined_ae_improved,
+        n_neighbors=10,
+        pca_model=None,
+        method_name="Improved Autoencoder (SSIM)"
+    )
+    print_dimred_metrics(ae_improved_dimred_metrics)
+    
     # Summary comparison
     print("\n" + "-" * 70)
     print("Dimensionality Reduction Comparison:")
     print("-" * 70)
-    print(f"{'Metric':<25} {'PCA':<15} {'UMAP':<15}")
+    print(f"{'Method':<25} {'Trustworthiness':<15} {'Continuity':<15}")
     print("-" * 55)
-    print(f"{'Trustworthiness':<25} {pca_dimred_metrics['trustworthiness']:<15.4f} {umap_dimred_metrics['trustworthiness']:<15.4f}")
-    print(f"{'Reconstruction Error':<25} {pca_dimred_metrics['reconstruction_error']:<15.4f} {'N/A':<15}")
-    print(f"{'Relative Recon Error':<25} {pca_dimred_metrics['relative_recon_error']*100:<14.2f}% {'N/A':<15}")
+    print(f"{'PCA':<25} {pca_dimred_metrics['trustworthiness']:<15.4f} {pca_dimred_metrics.get('continuity', np.nan):<15.4f}")
+    print(f"{'UMAP':<25} {umap_dimred_metrics['trustworthiness']:<15.4f} {umap_dimred_metrics.get('continuity', np.nan):<15.4f}")
+    print(f"{'Autoencoder':<25} {ae_dimred_metrics['trustworthiness']:<15.4f} {ae_dimred_metrics.get('continuity', np.nan):<15.4f}")
+    print(f"{'Autoencoder (SSIM)':<25} {ae_improved_dimred_metrics['trustworthiness']:<15.4f} {ae_improved_dimred_metrics.get('continuity', np.nan):<15.4f}")
     
     # =========================================================================
-    # Step 4: K-Means Clustering
+    # Step 5: K-Means Clustering with Optimal K
     # =========================================================================
     print("\n" + "=" * 70)
-    print("STEP 4: K-Means Clustering")
+    print("STEP 5: K-Means Clustering with Optimal K")
     print("=" * 70)
     
-    # Define k values to test
-    k_values = list(range(5, min(n_classes + 15, 35), 5))
-    if n_classes not in k_values:
-        k_values.append(n_classes)
-    k_values = sorted(set(k_values))
+    # First, find optimal k by testing range
+    k_values_test = list(range(5, min(n_classes + 15, 35), 5))
+    if n_classes not in k_values_test:
+        k_values_test.append(n_classes)
+    k_values_test = sorted(set(k_values_test))
     
-    print(f"\nTesting k values: {k_values}")
-    
-    # Clustering on PCA features
-    results_pca = run_kmeans_clustering(
-        X_combined_pca, y_combined, k_values,
-        n_init=10, method_name="PCA Features"
-    )
-    
-    # Clustering on UMAP features
-    results_umap = run_kmeans_clustering(
-        X_combined_umap, y_combined, k_values,
-        n_init=10, method_name="UMAP Features"
-    )
-    
-    # Store results
-    results_dict = {
-        "PCA": results_pca,
-        "UMAP": results_umap,
+    # Prepare feature dictionaries for clustering
+    X_combined_dict = {
+        "PCA": X_combined_pca,
+        "UMAP": X_combined_umap,
+        "Autoencoder": X_combined_ae,
+        "Autoencoder (SSIM)": X_combined_ae_improved,
     }
     
-    # =========================================================================
-    # Step 5: Visualizations
-    # =========================================================================
+    # Run clustering to get all k results
+    results_all = run_clustering_pipeline(
+        X_combined_dict, y_combined, k_values_test, "ground_truth (all k)", output_dir
+    )
+    
+    # Find optimal k
+    optimal_k_silhouette = find_optimal_k(results_all)
+    
     print("\n" + "=" * 70)
-    print("STEP 5: Visualizations")
+    print("OPTIMAL K VALUES (by Silhouette Score)")
     print("=" * 70)
+    for method_name, opt_k in optimal_k_silhouette.items():
+        print(f"  {method_name:<25} k={opt_k}")
     
-    # Dimensionality reduction comparison
-    print("\nGenerating dimensionality reduction comparison plot...")
-    plot_dimred_comparison(
-        pca_dimred_metrics, umap_dimred_metrics,
-        save_path=os.path.join(output_dir, "dimred_comparison.png"),
-        algorithm_name="K-Means"
-    )
+    # Create 2D features for visualization
+    X_combined_pca_2d = X_combined_pca[:, :2]
     
-    # Metric comparison
-    print("\nGenerating metric comparison plot...")
-    plot_metric_comparison(
-        results_dict,
-        save_path=os.path.join(output_dir, "metric_comparison.png"),
-        algorithm_name="K-Means"
-    )
-    
-    # 2D visualizations at k = n_classes
-    print("\nGenerating 2D clustering visualizations...")
-    
-    # For 2D visualization, we need 2D features
     X_train_umap_2d, X_val_umap_2d, _, _ = fit_and_transform_umap(
         X_train, X_val, X_test,
         n_components=2,
@@ -341,54 +281,211 @@ def main():
     )
     X_combined_umap_2d = np.vstack([X_train_umap_2d, X_val_umap_2d])
     
-    # For PCA 2D, use first 2 components
-    X_combined_pca_2d = X_combined_pca[:, :2]
+    # Autoencoders: use first and last components for 2D visualization
+    X_combined_ae_2d = X_combined_ae[:, [0, -1]]
+    X_combined_ae_improved_2d = X_combined_ae_improved[:, [0, -1]]
     
-    # Cluster and visualize at k = n_classes
-    kmeans_pca = KMeans(n_clusters=n_classes, n_init=10, random_state=42)
-    labels_pca = kmeans_pca.fit_predict(X_combined_pca)
+    X_combined_2d_dict = {
+        "PCA": X_combined_pca_2d,
+        "UMAP": X_combined_umap_2d,
+        "Autoencoder": X_combined_ae_2d,
+        "Autoencoder (SSIM)": X_combined_ae_improved_2d,
+    }
     
-    kmeans_umap = KMeans(n_clusters=n_classes, n_init=10, random_state=42)
-    labels_umap = kmeans_umap.fit_predict(X_combined_umap)
+    # =========================================================================
+    # Step 6: Visualizations at Optimal K
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 6: Visualizations at Optimal K")
+    print("=" * 70)
     
-    # PCA 2D plot
-    plot_clustering_2d(
-        X_combined_pca_2d, labels_pca, y_combined,
-        title=f"Clustering - PCA Features (k={n_classes})",
-        save_path=os.path.join(output_dir, "clustering_pca_2d.png"),
-        algorithm_name="K-Means"
+    run_clustering_pipeline(
+        X_combined_dict, y_combined, optimal_k_silhouette, "optimal", output_dir,
+        X_combined_2d_dict=X_combined_2d_dict,
+        X_original=X_combined, y_original=y_combined
     )
     
-    # UMAP 2D plot
-    plot_clustering_2d(
-        X_combined_umap_2d, labels_umap, y_combined,
-        title=f"Clustering - UMAP Features (k={n_classes})",
-        save_path=os.path.join(output_dir, "clustering_umap_2d.png"),
-        algorithm_name="K-Means"
+    # =========================================================================
+    # Step 7: Visualizations at Ground Truth K
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 7: Visualizations at Ground Truth K (k={})".format(n_classes))
+    print("=" * 70)
+    
+    # Create dict with ground truth k for each method
+    ground_truth_k_dict = {method: n_classes for method in X_combined_dict.keys()}
+    
+    run_clustering_pipeline(
+        X_combined_dict, y_combined, ground_truth_k_dict, "ground_truth", output_dir,
+        X_combined_2d_dict=X_combined_2d_dict,
+        X_original=X_combined, y_original=y_combined
     )
     
-    # Summary table
-    print("\nGenerating summary table...")
+    # =========================================================================
+    # Step 8: Generate Summary Tables
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 8: Generate Summary Tables")
+    print("=" * 70)
+    
+    # Summary table at ground truth k
+    print("\nGenerating summary table at ground truth k...")
     summary_df = plot_summary_table(
-        results_dict, n_classes,
-        save_path=os.path.join(output_dir, "summary_table.png"),
+        results_all, n_classes,
+        save_path=os.path.join(output_dir, "summary_table_ground_truth_k.png"),
+        algorithm_name="K-Means"
+    )
+    
+    # Summary table at optimal k
+    print("Generating summary table at optimal k...")
+    optimal_metrics_list = []
+    for method_name, opt_k in optimal_k_silhouette.items():
+        row = results_all[method_name][results_all[method_name]["k"] == opt_k]
+        if not row.empty:
+            optimal_metrics_list.append({
+                "Method": method_name,
+                "k": opt_k,
+                "Silhouette": row["silhouette"].values[0],
+                "Purity": row["purity"].values[0],
+                "NMI": row["nmi"].values[0],
+                "ARI": row["ari"].values[0],
+            })
+    
+    # Create summary table figure for optimal k
+    if optimal_metrics_list:
+        summary_df_optimal = pd.DataFrame(optimal_metrics_list)
+        
+        fig, ax = plt.subplots(figsize=(12, 3))
+        ax.axis('tight')
+        ax.axis('off')
+        
+        # Prepare data for table display
+        table_data = []
+        for _, row in summary_df_optimal.iterrows():
+            table_data.append([
+                row["Method"],
+                f"k={int(row['k'])}",
+                f"{row['Silhouette']:.4f}",
+                f"{row['Purity']:.4f}",
+                f"{row['NMI']:.4f}",
+                f"{row['ARI']:.4f}",
+            ])
+        
+        table = ax.table(
+            cellText=table_data,
+            colLabels=["Method", "k", "Silhouette", "Purity", "NMI", "ARI"],
+            cellLoc='center',
+            loc='center',
+            colColours=['lightsteelblue'] * 6
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(11)
+        table.scale(1.2, 1.5)
+        
+        plt.title("Clustering Results at Optimal k (by Silhouette Score)", fontsize=12, pad=20)
+        
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        plt.savefig(os.path.join(output_dir, "summary_table_optimal_k.png"), 
+                   bbox_inches='tight', dpi=150)
+        plt.close()
+        print(f"Saved: {os.path.join(output_dir, 'summary_table_optimal_k.png')}")
+    
+    # =========================================================================
+    # Step 9: Metric Comparison Plot
+    # =========================================================================
+    print("\nGenerating metric comparison plot...")
+    plot_metric_comparison(
+        results_all,
+        save_path=os.path.join(output_dir, "metric_comparison.png"),
         algorithm_name="K-Means"
     )
     
     # =========================================================================
-    # Step 6: Summary
+    # Step 10: Optimal K Analysis & Comparison
     # =========================================================================
-    print_summary(results_dict, n_classes)
+    print("\n" + "=" * 70)
+    print("STEP 10: Optimal K Analysis & Comparison")
+    print("=" * 70)
     
-    # Save results to CSV
+    # Print optimal k summary
+    print_optimal_k_summary(results_all, n_classes, optimal_k_silhouette)
+    
+    # =========================================================================
+    # Step 11: Save All Results
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("STEP 11: Saving Results")
+    print("=" * 70)
+    
+    # Save full clustering results
+    results_pca = results_all["PCA"].copy()
+    results_umap = results_all["UMAP"].copy()
+    results_ae = results_all["Autoencoder"].copy()
+    results_ae_improved = results_all["Autoencoder (SSIM)"].copy()
+    
     results_pca["method"] = "PCA"
     results_umap["method"] = "UMAP"
-    all_results = pd.concat([results_pca, results_umap], ignore_index=True)
+    results_ae["method"] = "Autoencoder"
+    results_ae_improved["method"] = "Autoencoder (SSIM)"
+    
+    all_results = pd.concat(
+        [results_pca, results_umap, results_ae, results_ae_improved],
+        ignore_index=True
+    )
     results_path = os.path.join(output_dir, "clustering_results.csv")
     all_results.to_csv(results_path, index=False)
-    print(f"\n✓ Results saved to {results_path}")
+    print(f"✓ Results saved to {results_path}")
     
-    return results_dict
+    # Save optimal k summary
+    optimal_k_summary = pd.DataFrame({
+        "Method": list(optimal_k_silhouette.keys()),
+        "Optimal_k_Silhouette": list(optimal_k_silhouette.values()),
+        "Ground_Truth_k": n_classes
+    })
+    optimal_k_path = os.path.join(output_dir, "optimal_k_summary.csv")
+    optimal_k_summary.to_csv(optimal_k_path, index=False)
+    print(f"✓ Optimal k summary saved to {optimal_k_path}")
+    
+    # Save metrics at optimal k
+    optimal_metrics_list = []
+    for method_name, opt_k in optimal_k_silhouette.items():
+        row = results_all[method_name][results_all[method_name]["k"] == opt_k]
+        if not row.empty:
+            row_dict = row.iloc[0].to_dict()
+            row_dict['method'] = method_name
+            optimal_metrics_list.append(row_dict)
+    
+    optimal_metrics_df = pd.DataFrame(optimal_metrics_list)
+    optimal_metrics_path = os.path.join(output_dir, "metrics_at_optimal_k.csv")
+    optimal_metrics_df.to_csv(optimal_metrics_path, index=False)
+    print(f"✓ Metrics at optimal k saved to {optimal_metrics_path}")
+    
+    # Save dimensionality reduction metrics
+    dimred_comparison = pd.DataFrame({
+        "Method": ["PCA", "UMAP", "Autoencoder", "Autoencoder (SSIM)"],
+        "Trustworthiness": [
+            pca_dimred_metrics['trustworthiness'],
+            umap_dimred_metrics['trustworthiness'],
+            ae_dimred_metrics['trustworthiness'],
+            ae_improved_dimred_metrics['trustworthiness']
+        ],
+        "Continuity": [
+            pca_dimred_metrics.get('continuity', np.nan),
+            umap_dimred_metrics.get('continuity', np.nan),
+            ae_dimred_metrics.get('continuity', np.nan),
+            ae_improved_dimred_metrics.get('continuity', np.nan)
+        ]
+    })
+    dimred_path = os.path.join(output_dir, "dimred_metrics.csv")
+    dimred_comparison.to_csv(dimred_path, index=False)
+    print(f"✓ Dimensionality reduction metrics saved to {dimred_path}")
+    
+    print("\n" + "=" * 70)
+    print("COMPLETE!")
+    print("=" * 70)
+    
+    return results_all
 
 
 if __name__ == "__main__":
