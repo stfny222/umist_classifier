@@ -261,7 +261,7 @@ def main():
     )
     
     # Find optimal k
-    optimal_k_silhouette = find_optimal_k(results_all, method='silhouette')
+    optimal_k_silhouette = find_optimal_k(results_all)
     
     print("\n" + "=" * 70)
     print("OPTIMAL K VALUES (by Silhouette Score)")
@@ -312,8 +312,11 @@ def main():
     print("STEP 7: Visualizations at Ground Truth K (k={})".format(n_classes))
     print("=" * 70)
     
+    # Create dict with ground truth k for each method
+    ground_truth_k_dict = {method: n_classes for method in X_combined_dict.keys()}
+    
     run_clustering_pipeline(
-        X_combined_dict, y_combined, k_values_test, "ground_truth", output_dir,
+        X_combined_dict, y_combined, ground_truth_k_dict, "ground_truth", output_dir,
         X_combined_2d_dict=X_combined_2d_dict,
         X_original=X_combined, y_original=y_combined
     )
@@ -405,11 +408,8 @@ def main():
     print("STEP 10: Optimal K Analysis & Comparison")
     print("=" * 70)
     
-    # Find optimal k using elbow method
-    optimal_k_elbow = find_optimal_k(results_all, method='elbow')
-    
     # Print optimal k summary
-    print_optimal_k_summary(results_all, n_classes, optimal_k_silhouette, optimal_k_elbow)
+    print_optimal_k_summary(results_all, n_classes, optimal_k_silhouette)
     
     # =========================================================================
     # Step 11: Save All Results
@@ -441,7 +441,6 @@ def main():
     optimal_k_summary = pd.DataFrame({
         "Method": list(optimal_k_silhouette.keys()),
         "Optimal_k_Silhouette": list(optimal_k_silhouette.values()),
-        "Optimal_k_Elbow": list(optimal_k_elbow.values()),
         "Ground_Truth_k": n_classes
     })
     optimal_k_path = os.path.join(output_dir, "optimal_k_summary.csv")
