@@ -412,9 +412,9 @@ def main():
 
 	n_components, pca_full, cum_var, var_ratio = determine_pca_components(
 		X_train,
-		variance_threshold=0.95,
+		variance_threshold=variance_threshold,
 		max_components=None,
-		plot=True,
+		plot=plot,
 	)
 
 	# Fit and transform
@@ -434,7 +434,7 @@ def main():
 	n_pca_components, pca_full_lda, cum_var_lda, var_ratio_lda = determine_pca_components_for_lda(
 		X_train,
 		y_train,
-		plot=True,
+		plot=plot,
 	)
 	# Fit and transform
 	X_train_lda, X_val_lda, X_test_lda, pca_lda, lda = fit_and_transform_pca_lda(
