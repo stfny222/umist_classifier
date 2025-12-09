@@ -22,16 +22,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from shared import evaluate_clustering
 
 
-def find_optimal_k(results_dict, method='silhouette', k_range=None):
+def find_optimal_k(results_dict, k_range=None):
     """
-    Find optimal k using elbow method or silhouette score.
+    Find optimal k using silhouette score.
     
     Parameters
     ----------
     results_dict : dict
         Dictionary mapping method name -> results DataFrame
-    method : str
-        'silhouette' (maximize silhouette) or 'elbow' (find elbow in inertia)
     k_range : list, optional
         K values to consider. If None, uses all available k values.
         
@@ -43,33 +41,15 @@ def find_optimal_k(results_dict, method='silhouette', k_range=None):
     optimal_k_dict = {}
     
     for method_name, results_df in results_dict.items():
-        if method == 'silhouette':
-            # Find k with maximum silhouette score
-            best_idx = results_df['silhouette'].idxmax()
-            optimal_k = results_df.loc[best_idx, 'k']
-            optimal_k_dict[method_name] = int(optimal_k)
-            
-        elif method == 'elbow':
-            # Find elbow in inertia curve using simple derivative method
-            if len(results_df) < 3:
-                optimal_k = results_df.iloc[-1]['k']
-            else:
-                inertias = results_df['inertia'].values
-                k_values = results_df['k'].values
-                
-                # Calculate second derivative (curvature)
-                deltas = np.diff(inertias)
-                delta_deltas = np.diff(deltas)
-                
-                # Elbow is where curvature is maximum
-                elbow_idx = np.argmax(delta_deltas) + 1
-                optimal_k = k_values[elbow_idx]
-                optimal_k_dict[method_name] = int(optimal_k)
+        # Find k with maximum silhouette score
+        best_idx = results_df['silhouette'].idxmax()
+        optimal_k = results_df.loc[best_idx, 'k']
+        optimal_k_dict[method_name] = int(optimal_k)
     
     return optimal_k_dict
 
 
-def print_optimal_k_summary(results_dict, n_classes, optimal_k_silhouette, optimal_k_elbow):
+def print_optimal_k_summary(results_dict, n_classes, optimal_k_silhouette):
     """
     Print summary comparison of results at optimal k values.
     
@@ -81,8 +61,6 @@ def print_optimal_k_summary(results_dict, n_classes, optimal_k_silhouette, optim
         True number of classes
     optimal_k_silhouette : dict
         Optimal k by silhouette method
-    optimal_k_elbow : dict
-        Optimal k by elbow method
     """
     metrics = ["silhouette", "purity", "nmi", "ari"]
     
@@ -436,8 +414,9 @@ def run_clustering_pipeline(X_combined_dict, y_combined, k_values, k_type, outpu
             
             print(f"  {metric.upper()}: {best_method} ({best_value:.4f})")
     else:
-        # Standard summary at ground truth k
-        print_summary(results_dict, int(test_k_values[-1]))
+        # Standard summary at ground truth k (k=20 for UMIST dataset)
+        ground_truth_k = 20
+        print_summary(results_dict, ground_truth_k)
     
     # Generate visualizations if 2D features provided
     if X_combined_2d_dict is not None:
@@ -445,7 +424,7 @@ def run_clustering_pipeline(X_combined_dict, y_combined, k_values, k_type, outpu
         print(f"VISUALIZATIONS ({k_type})")
         print("=" * 70)
         
-        if is_single_k:
+        if is_single_k and k_type == "optimal":
             # Visualizations at optimal k
             for method_name, opt_k in k_values.items():
                 X_2d = X_combined_2d_dict[method_name]
@@ -460,8 +439,8 @@ def run_clustering_pipeline(X_combined_dict, y_combined, k_values, k_type, outpu
                     algorithm_name="K-Means"
                 )
         else:
-            # Visualizations at ground truth k
-            k = int(test_k_values[-1])
+            # Visualizations at ground truth k (k=20 for UMIST dataset)
+            k = 20
             for method_name in X_combined_dict.keys():
                 X_2d = X_combined_2d_dict[method_name]
                 kmeans = KMeans(n_clusters=k, n_init=10, random_state=42)
@@ -483,7 +462,7 @@ def run_clustering_pipeline(X_combined_dict, y_combined, k_values, k_type, outpu
         print(f"CLUSTER IMAGES COMPARISON ({k_type})")
         print("=" * 70)
         
-        if is_single_k:
+        if is_single_k and k_type == "optimal":
             # Cluster images at optimal k for each method
             for method_name, opt_k in k_values.items():
                 print(f"\nGenerating cluster images for {method_name} at optimal k={opt_k}...")
@@ -502,8 +481,8 @@ def run_clustering_pipeline(X_combined_dict, y_combined, k_values, k_type, outpu
                     save_path=os.path.join(output_dir, filename)
                 )
         else:
-            # Cluster images at ground truth k for all methods
-            k = int(test_k_values[-1])
+            # Cluster images at ground truth k for all methods (k=20 for UMIST dataset)
+            k = 20
             print(f"\nGenerating cluster images for all methods at ground truth k={k}...")
             
             labels_dict = {}
